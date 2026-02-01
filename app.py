@@ -547,9 +547,62 @@ Focus on engineering challenges, not just model accuracy.
 ---
 
 ## Output Format:
-Return a JSON object matching the TailoredResume schema exactly.
+Return a JSON object with this EXACT structure:
 
-Return ONLY valid JSON, no markdown code blocks, no explanations."""
+```json
+{
+  "basics": {
+    "name": "Full Name",
+    "email": "email@example.com",
+    "phone": "+1-xxx-xxx-xxxx",
+    "location": "City, Country",
+    "links": ["https://linkedin.com/in/...", "https://github.com/..."]
+  },
+  "summary": "Professional summary paragraph (3 sentences)",
+  "education": [
+    {
+      "institution": "University Name",
+      "area": "Field of Study",
+      "studyType": "Degree",
+      "startDate": "Month Year",
+      "endDate": "Month Year or Present",
+      "location": "City, Country"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Company Name",
+      "location": "City, Country",
+      "role": "Job Title",
+      "startDate": "Month Year",
+      "endDate": "Month Year or Present",
+      "bullets": [
+        "Power verb + specific achievement + technology + quantified result",
+        "Another achievement bullet with metrics"
+      ]
+    }
+  ],
+  "skills": {
+    "languages_frameworks": ["Skill1", "Skill2"],
+    "tools": ["Tool1", "Tool2"]
+  },
+  "projects": [
+    {
+      "name": "Project Name",
+      "techStack": "Technologies used (comma separated)",
+      "description": "Brief description"
+    }
+  ],
+  "achievements": ["Achievement 1", "Achievement 2", "Achievement 3"]
+}
+```
+
+**CRITICAL RULES:**
+1. Experience MUST be an array of OBJECTS (not strings)
+2. Each experience object MUST have: company, location, role, startDate, endDate, bullets
+3. Bullets must be an array of strings
+4. Preserve dates from input EXACTLY as they appear
+5. Return ONLY valid JSON, no markdown code blocks, no explanations."""
 
 
 def tailor_resume_with_model_router(
