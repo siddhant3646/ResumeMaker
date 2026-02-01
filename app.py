@@ -30,7 +30,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
-from groq import Groq
 from pydantic import BaseModel, Field
 
 # Try to import google-generativeai
@@ -39,6 +38,113 @@ try:
     GOOGLE_GENAI_AVAILABLE = True
 except ImportError:
     GOOGLE_GENAI_AVAILABLE = False
+
+
+# ============================================================================
+# Model Router - Tiered Fallback System with Daily Counters
+# ============================================================================
+
+class ModelRouter:
+    """
+    Manages tiered model selection with daily request counters.
+    
+    Tier 1: gemini-2.0-flash (20 requests/day)
+    Tier 2: gemini-2.5-flash-preview-05-06 (20 requests/day)
+    Tier 3: gemini-2.5-flash-lite-preview-06-17 (20 requests/day)
+    Tier 4: gemma-3-27b-it (unlimited)
+    
+    Counters reset at midnight UTC daily.
+    """
+    
+    # Model configuration
+    MODELS = [
+        {"name": "gemini-2.0-flash", "limit": 20, "tier": 1},
+        {"name": "gemini-2.5-flash-preview-05-06", "limit": 20, "tier": 2},
+        {"name": "gemini-2.5-flash-lite-preview-06-17", "limit": 20, "tier": 3},
+        {"name": "gemma-3-27b-it", "limit": float('inf'), "tier": 4},  # Unlimited
+    ]
+    
+    def __init__(self):
+        """Initialize or load counters from session state."""
+        self._init_counters()
+    
+    def _init_counters(self):
+        """Initialize counters in session state if not present."""
+        # Check if we need to reset (new day in UTC)
+        current_date = datetime.utcnow().strftime("%Y-%m-%d")
+        
+        if 'model_router_date' not in st.session_state:
+            st.session_state.model_router_date = current_date
+        
+        # Reset counters if it's a new day
+        if st.session_state.model_router_date != current_date:
+            st.session_state.model_router_date = current_date
+            for model in self.MODELS:
+                st.session_state[f"model_counter_{model['name']}"] = 0
+        
+        # Initialize counters if not present
+        for model in self.MODELS:
+            key = f"model_counter_{model['name']}"
+            if key not in st.session_state:
+                st.session_state[key] = 0
+    
+    def get_model_for_request(self) -> str:
+        """
+        Get the appropriate model based on daily usage counters.
+        
+        Returns:
+            Model name to use for the request
+        """
+        self._init_counters()  # Ensure counters are fresh
+        
+        for model in self.MODELS:
+            counter_key = f"model_counter_{model['name']}"
+            current_count = st.session_state.get(counter_key, 0)
+            
+            if current_count < model['limit']:
+                # Increment counter and return this model
+                st.session_state[counter_key] = current_count + 1
+                return model['name']
+        
+        # Fallback to last model (gemma-3-27b-it) which has unlimited usage
+        # Still increment counter for tracking
+        counter_key = f"model_counter_{self.MODELS[-1]['name']}"
+        st.session_state[counter_key] = st.session_state.get(counter_key, 0) + 1
+        return self.MODELS[-1]['name']
+    
+    def get_current_tier_info(self) -> dict:
+        """
+        Get information about current tier usage.
+        
+        Returns:
+            Dictionary with tier information
+        """
+        self._init_counters()
+        
+        info = []
+        for model in self.MODELS:
+            counter_key = f"model_counter_{model['name']}"
+            count = st.session_state.get(counter_key, 0)
+            limit = model['limit'] if model['limit'] != float('inf') else '∞'
+            percentage = (count / model['limit'] * 100) if model['limit'] != float('inf') else 0
+            
+            info.append({
+                'tier': model['tier'],
+                'model': model['name'],
+                'used': count,
+                'limit': limit,
+                'percentage': percentage,
+                'active': count < model['limit'] if model['limit'] != float('inf') else True
+            })
+        
+        return info
+    
+    def reset_counters(self):
+        """Manually reset all counters (for testing)."""
+        current_date = datetime.utcnow().strftime("%Y-%m-%d")
+        st.session_state.model_router_date = current_date
+        for model in self.MODELS:
+            st.session_state[f"model_counter_{model['name']}"] = 0
 
 
 # ============================================================================
@@ -220,8 +326,8 @@ def parse_resume_with_gemma(
     retry_delay: float = 2.0
 ) -> ParsedResume:
     """
-    Parse resume text into structured JSON using gemma-3-27b-it via Google AI Studio.
-    Includes retry logic for handling transient failures.
+    Parse resume text into structured JSON using gemma-3-12b-it via Google AI Studio.
+    Includes retry logic for handling transient failures and rate limits (429 errors).
     
     Args:
         resume_text: The text extracted from the resume
@@ -241,8 +347,8 @@ def parse_resume_with_gemma(
     # Configure the API
     genai.configure(api_key=api_key)
     
-    # Use gemma-3-27b-it model
-    model = genai.GenerativeModel("gemma-3-27b-it")
+    # Use gemma-3-12b-it model for parsing (lighter, faster)
+    model = genai.GenerativeModel("gemma-3-12b-it")
     
     # Build the prompt
     # Use replace() instead of format() to avoid issues with curly braces in resume text
@@ -287,13 +393,19 @@ def parse_resume_with_gemma(
                 print(f"✅ Successfully parsed resume after {attempt + 1} attempts")
             return parsed_resume
             
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             last_error = e
-            last_response_text = response.text if hasattr(response, 'text') and response.text else last_response_text
+            error_str = str(e).lower()
+            
+            # Check for rate limit (429) or quota errors
+            is_rate_limit = any(x in error_str for x in ['429', 'rate limit', 'quota', 'resource exhausted'])
             
             if attempt < max_retries - 1:
                 # Calculate exponential backoff delay
                 current_delay = retry_delay * (2 ** attempt)
+                if is_rate_limit:
+                    current_delay *= 2  # Extra delay for rate limits
+                    print(f"⚠️ Rate limit hit (429). Waiting longer...")
                 print(f"⚠️ Attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
                 print(f"   Retrying in {current_delay:.1f} seconds...")
                 time.sleep(current_delay)
@@ -431,50 +543,97 @@ Return a JSON object matching the TailoredResume schema exactly.
 Return ONLY valid JSON, no markdown code blocks, no explanations."""
 
 
-def tailor_resume_with_groq(
+def tailor_resume_with_model_router(
     master_resume: dict,
     job_description: str,
-    api_key: str
-) -> Generator[str, None, None]:
+    api_key: str,
+    model_router: ModelRouter,
+    max_retries: int = 3,
+    retry_delay: float = 2.0
+) -> tuple[str, str]:
     """
-    Tailor resume based on job description using Groq API.
+    Tailor resume using tiered model selection via ModelRouter.
+    Includes retry logic for handling transient failures and rate limits (429 errors).
     
     Args:
         master_resume: The parsed resume as a dictionary
         job_description: The job description text
-        api_key: Groq API key
+        api_key: Google AI Studio API key
+        model_router: ModelRouter instance for tiered selection
+        max_retries: Maximum number of retry attempts (default: 3)
+        retry_delay: Initial delay between retries in seconds (default: 2.0)
         
-    Yields:
-        Chunks of the generated response
+    Returns:
+        Tuple of (response_text, model_name_used)
+        
+    Raises:
+        ValueError: If all retry attempts fail
     """
-    client = Groq(api_key=api_key)
+    if not GOOGLE_GENAI_AVAILABLE:
+        raise ImportError("google-generativeai library not available")
+    
+    # Configure the API
+    genai.configure(api_key=api_key)
     
     # Build the prompt
-    # Use replace() instead of format() to avoid issues with curly braces in the content
     master_resume_json_str = json.dumps(master_resume, indent=2)
     prompt = TAILORING_PROMPT.replace("{master_resume_json}", master_resume_json_str)
     prompt = prompt.replace("{job_description}", job_description)
     
-    # Create completion with the exact structure requested
-    completion = client.chat.completions.create(
-        model="groq/compound",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=1,
-        max_completion_tokens=1024,
-        top_p=1,
-        stream=True,
-        stop=None,
-        compound_custom={"tools":{"enabled_tools":["web_search","code_interpreter","visit_website"]}}
-    )
+    last_error = None
+    model_name = None
     
-    # Handle streaming response
-    for chunk in completion:
-        yield chunk.choices[0].delta.content or ""
+    for attempt in range(max_retries):
+        try:
+            # Get model from router (only on first attempt or after certain errors)
+            if attempt == 0 or model_name is None:
+                model_name = model_router.get_model_for_request()
+                print(f"🤖 Using model: {model_name}")
+            
+            # Create model instance
+            model = genai.GenerativeModel(model_name)
+            
+            # Generate response
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=8192,
+                )
+            )
+            
+            if not response.text:
+                raise ValueError("Empty response from tailoring API")
+            
+            # Success! Return the response text and model name
+            if attempt > 0:
+                print(f"✅ Successfully tailored resume after {attempt + 1} attempts")
+            return response.text, model_name
+            
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            
+            # Check for rate limit (429) or quota errors
+            is_rate_limit = any(x in error_str for x in ['429', 'rate limit', 'quota', 'resource exhausted'])
+            
+            if attempt < max_retries - 1:
+                # Calculate exponential backoff delay
+                current_delay = retry_delay * (2 ** attempt)
+                if is_rate_limit:
+                    current_delay *= 2  # Extra delay for rate limits
+                    print(f"⚠️ Rate limit hit (429). Waiting longer...")
+                    # Try next tier model on rate limit
+                    model_name = None  # Force model router to select next tier
+                print(f"⚠️ Tailoring attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
+                print(f"   Retrying in {current_delay:.1f} seconds...")
+                time.sleep(current_delay)
+            else:
+                # All retries exhausted
+                break
+    
+    # All retries failed
+    raise ValueError(f"Failed to tailor resume after {max_retries} attempts. Last error: {last_error}")
 
 
 def parse_tailored_response(response_text: str) -> ParsedResume:
@@ -486,7 +645,14 @@ def parse_tailored_response(response_text: str) -> ParsedResume:
         
     Returns:
         ParsedResume object
+        
+    Raises:
+        ValueError: If response is empty or invalid JSON
     """
+    # Check for empty response
+    if not response_text or not response_text.strip():
+        raise ValueError("Empty response from Groq API. The model may have failed to generate output.")
+    
     # Clean up response text
     text = response_text.strip()
     
@@ -499,14 +665,18 @@ def parse_tailored_response(response_text: str) -> ParsedResume:
         text = text[:-3]
     text = text.strip()
     
+    # Check again after cleaning
+    if not text:
+        raise ValueError("Empty response from Groq API after cleaning markdown.")
+    
     # Parse JSON into Pydantic model
     try:
         parsed_data = json.loads(text)
         return ParsedResume(**parsed_data)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse tailored response as JSON: {e}")
+        raise ValueError(f"Failed to parse tailored response as JSON: {e}\n\nResponse text:\n{text[:500]}")
     except Exception as e:
-        raise ValueError(f"Failed to validate tailored response: {e}")
+        raise ValueError(f"Failed to validate tailored response: {e}\n\nResponse text:\n{text[:500]}")
 
 
 # ============================================================================
@@ -778,9 +948,9 @@ def main():
     # Get API keys (decrypted from secrets)
     api_keys = get_decrypted_api_keys()
     
-    # Check if keys are available
-    if not api_keys["google"] or not api_keys["groq"]:
-        st.error("🔐 API keys not configured properly!")
+    # Check if keys are available (only Google AI key needed now)
+    if not api_keys["google"]:
+        st.error("🔐 Google AI API key not configured properly!")
         st.info("""
         Please configure your secrets in Streamlit Cloud:
         1. Go to https://share.streamlit.io/
@@ -789,7 +959,6 @@ def main():
         4. Add these secrets:
            - ENCRYPTION_PASSWORD: (your password)
            - GOOGLE_API_KEY_ENCRYPTED: (encrypted Google AI key)
-           - GROQ_API_KEY_ENCRYPTED: (encrypted Groq key)
         
         Use `python encrypt_keys.py` to generate encrypted keys.
         """)
@@ -874,9 +1043,9 @@ def main():
             st.stop()
         
         try:
-            # Step 1: Parse Resume with Gemma
+            # Step 1: Parse Resume with Gemma 12B
             st.subheader("Step 1: Parsing Resume")
-            with st.spinner("🤖 Parsing your resume with gemma-3-27b-it..."):
+            with st.spinner("🤖 Parsing your resume with gemma-3-12b-it..."):
                 st.session_state.parsed_resume = parse_resume_with_gemma(
                     resume_text=resume_text,
                     api_key=api_keys["google"]
@@ -888,30 +1057,38 @@ def main():
                    f"{len(parsed.projects)} projects, "
                    f"{len(parsed.education)} education entries")
             
-            # Step 2: Tailor Resume with Groq
+            # Step 2: Tailor Resume with Model Router
             st.subheader("Step 2: Tailoring for Job Description")
             
-            response_container = st.empty()
-            full_response = []
+            # Initialize model router
+            router = ModelRouter()
             
-            with st.spinner("🎯 Tailoring resume with Groq compound model..."):
+            # Show current tier usage
+            with st.expander("📊 Model Tier Usage (Resets at Midnight UTC)"):
+                tier_info = router.get_current_tier_info()
+                for tier in tier_info:
+                    limit_str = f"{tier['used']}/{tier['limit']}" if tier['limit'] != '∞' else f"{tier['used']}/∞"
+                    progress = tier['percentage'] / 100 if tier['limit'] != '∞' else 0
+                    status = "✅ Active" if tier['active'] else "⏭️ Fallback"
+                    st.progress(progress, text=f"Tier {tier['tier']}: {limit_str} - {status}")
+            
+            with st.spinner("🎯 Tailoring resume..."):
                 # Convert Pydantic model to dict for JSON serialization
                 master_resume_dict = parsed.model_dump()
                 
-                # Stream the response
-                for chunk in tailor_resume_with_groq(
+                # Get tailored resume with model router
+                response_text, model_used = tailor_resume_with_model_router(
                     master_resume=master_resume_dict,
                     job_description=job_description,
-                    api_key=api_keys["groq"]
-                ):
-                    full_response.append(chunk)
-                    # Update display with accumulated response
-                    if len(full_response) % 20 == 0:  # Update every 20 chunks
-                        response_container.code("".join(full_response), language="json")
+                    api_key=api_keys["google"],
+                    model_router=router
+                )
+                st.session_state.tailored_response_text = response_text
+                st.info(f"🤖 Model used: {model_used}")
             
-            # Final display
-            st.session_state.tailored_response_text = "".join(full_response)
-            response_container.empty()
+            # Show raw response in expander for debugging
+            with st.expander("Debug: Raw Response"):
+                st.text(st.session_state.tailored_response_text[:2000])
             
             # Parse the tailored response
             st.session_state.tailored_resume = parse_tailored_response(
