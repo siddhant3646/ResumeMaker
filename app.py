@@ -21,7 +21,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Optional, Union
 
 import pdfplumber
 import streamlit as st
@@ -257,6 +257,14 @@ class Project(BaseModel):
     name: str = ""
     techStack: str = ""
     description: str = ""
+    
+    @classmethod
+    def model_validate(cls, data):
+        """Override validation to handle techStack as list or string."""
+        if isinstance(data, dict) and 'techStack' in data:
+            if isinstance(data['techStack'], list):
+                data['techStack'] = ", ".join(data['techStack'])
+        return super().model_validate(data)
 
 
 class Skills(BaseModel):
