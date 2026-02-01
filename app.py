@@ -257,14 +257,6 @@ class Project(BaseModel):
     name: str = ""
     techStack: str = ""
     description: str = ""
-    
-    @classmethod
-    def model_validate(cls, data):
-        """Override validation to handle techStack as list or string."""
-        if isinstance(data, dict) and 'techStack' in data:
-            if isinstance(data['techStack'], list):
-                data['techStack'] = ", ".join(data['techStack'])
-        return super().model_validate(data)
 
 
 class Skills(BaseModel):
@@ -392,8 +384,17 @@ def parse_resume_with_gemma(
                 response_text = response_text[:-3]
             response_text = response_text.strip()
             
-            # Parse JSON into Pydantic model
+            # Parse JSON into dict first
             parsed_data = json.loads(response_text)
+            
+            # Fix projects techStack - convert list to string if needed
+            if 'projects' in parsed_data and isinstance(parsed_data['projects'], list):
+                for project in parsed_data['projects']:
+                    if isinstance(project, dict) and 'techStack' in project:
+                        if isinstance(project['techStack'], list):
+                            project['techStack'] = ', '.join(project['techStack'])
+            
+            # Now validate with Pydantic
             parsed_resume = ParsedResume(**parsed_data)
             
             # Success! Return the parsed resume
@@ -677,9 +678,17 @@ def parse_tailored_response(response_text: str) -> ParsedResume:
     if not text:
         raise ValueError("Empty response from Groq API after cleaning markdown.")
     
-    # Parse JSON into Pydantic model
+    # Parse JSON into dict first
     try:
         parsed_data = json.loads(text)
+        
+        # Fix projects techStack - convert list to string if needed
+        if 'projects' in parsed_data and isinstance(parsed_data['projects'], list):
+            for project in parsed_data['projects']:
+                if isinstance(project, dict) and 'techStack' in project:
+                    if isinstance(project['techStack'], list):
+                        project['techStack'] = ', '.join(project['techStack'])
+        
         return ParsedResume(**parsed_data)
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse tailored response as JSON: {e}\n\nResponse text:\n{text[:500]}")
