@@ -272,7 +272,8 @@ def parse_resume_with_gemma(
     model = genai.GenerativeModel("gemma-3-27b-it")
     
     # Build the prompt
-    prompt = PARSING_PROMPT.format(resume_text=resume_text)
+    # Use replace() instead of format() to avoid issues with curly braces in resume text
+    prompt = PARSING_PROMPT.replace("{resume_text}", resume_text)
     
     # Generate response
     response = model.generate_content(
@@ -450,10 +451,10 @@ def tailor_resume_with_groq(
     client = Groq(api_key=api_key)
     
     # Build the prompt
-    prompt = TAILORING_PROMPT.format(
-        master_resume_json=json.dumps(master_resume, indent=2),
-        job_description=job_description
-    )
+    # Use replace() instead of format() to avoid issues with curly braces in the content
+    master_resume_json_str = json.dumps(master_resume, indent=2)
+    prompt = TAILORING_PROMPT.replace("{master_resume_json}", master_resume_json_str)
+    prompt = prompt.replace("{job_description}", job_description)
     
     # Create completion with the exact structure requested
     completion = client.chat.completions.create(
