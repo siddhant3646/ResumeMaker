@@ -18,6 +18,7 @@ import base64
 import io
 import json
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Generator, Optional
@@ -118,38 +119,38 @@ def get_decrypted_api_keys() -> dict[str, Optional[str]]:
 
 class Basics(BaseModel):
     """Basic contact information"""
-    name: str
-    email: str
-    phone: str
-    location: str
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    location: str = ""
     links: list[str] = Field(default_factory=list)
 
 
 class Education(BaseModel):
     """Education entry"""
-    institution: str
-    area: str
-    studyType: str
-    startDate: str
-    endDate: str
-    location: str
+    institution: str = ""
+    area: str = ""
+    studyType: str = ""
+    startDate: str = ""
+    endDate: str = ""
+    location: str = ""
 
 
 class Experience(BaseModel):
     """Work experience entry"""
-    company: str
-    location: str
-    role: str
-    startDate: str
-    endDate: str
+    company: str = ""
+    location: str = ""
+    role: str = ""
+    startDate: str = ""
+    endDate: str = ""
     bullets: list[str] = Field(default_factory=list)
 
 
 class Project(BaseModel):
     """Project entry"""
-    name: str
-    techStack: str
-    description: str
+    name: str = ""
+    techStack: str = ""
+    description: str = ""
 
 
 class Skills(BaseModel):
@@ -160,8 +161,8 @@ class Skills(BaseModel):
 
 class ParsedResume(BaseModel):
     """Complete parsed resume structure"""
-    basics: Basics
-    summary: str
+    basics: Basics = Field(default_factory=Basics)
+    summary: str = ""
     education: list[Education] = Field(default_factory=list)
     experience: list[Experience] = Field(default_factory=list)
     skills: Skills = Field(default_factory=Skills)
@@ -173,94 +174,66 @@ class ParsedResume(BaseModel):
 # Resume Parsing - Using Google AI Studio (gemma-3-27b-it)
 # ============================================================================
 
-PARSING_PROMPT = """You are an expert Resume Parser. Your task is to extract structured information from the provided resume text and return it as a valid JSON object.
+PARSING_PROMPT = """Extract structured information from this resume and return as JSON.
 
-## Instructions:
-
-1. Extract all relevant information from the resume text
-2. Structure it according to the schema below
-3. Return ONLY a valid JSON object - no markdown, no explanations
-
-## Output Schema:
-
+Required JSON structure:
 {
   "basics": {
-    "name": "Full Name",
-    "email": "email@example.com",
-    "phone": "+1-xxx-xxx-xxxx",
-    "location": "City, State/Country",
-    "links": ["https://linkedin.com/in/...", "https://github.com/..."]
+    "name": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "links": []
   },
-  "summary": "Professional summary paragraph",
-  "education": [
-    {
-      "institution": "University Name",
-      "area": "Field of Study",
-      "studyType": "Degree Type",
-      "startDate": "Month Year",
-      "endDate": "Month Year or Present",
-      "location": "City, Country"
-    }
-  ],
-  "experience": [
-    {
-      "company": "Company Name",
-      "location": "City, Country",
-      "role": "Job Title",
-      "startDate": "Month Year",
-      "endDate": "Month Year or Present",
-      "bullets": ["Achievement bullet 1", "Achievement bullet 2", ...]
-    }
-  ],
+  "summary": "",
+  "education": [],
+  "experience": [],
   "skills": {
-    "languages_frameworks": ["Python", "JavaScript", "React", ...],
-    "tools": ["Docker", "AWS", "Git", ...]
+    "languages_frameworks": [],
+    "tools": []
   },
-  "projects": [
-    {
-      "name": "Project Name",
-      "techStack": "Technologies used",
-      "description": "Brief description"
-    }
-  ],
-  "achievements": ["Achievement 1", "Award 1", ...]
+  "projects": [],
+  "achievements": []
 }
 
-## Important Rules:
+Rules:
+- Extract name, email, phone, location, links into basics
+- Put professional summary text in summary
+- List each education entry with institution, area, studyType, startDate, endDate, location
+- List each job in experience with company, location, role, startDate, endDate, bullets array
+- Split skills: programming languages/frameworks vs tools/platforms
+- List each project with name, techStack, description
+- List achievements as strings
+- Use empty strings "" or empty arrays [] for missing data
+- Return ONLY valid JSON, no markdown, no explanations
 
-1. Extract ALL work experience entries with complete bullet points
-2. Parse the professional summary accurately
-3. Split skills into languages/frameworks vs tools/platforms
-4. Include ALL projects mentioned
-5. Extract ALL achievements, awards, certifications
-6. Preserve dates exactly as they appear
-7. Use empty arrays [] if a section is not present
-8. Return ONLY valid JSON - no markdown code blocks, no additional text
-
----
-
-## Resume Text:
-
+Resume Text:
 {resume_text}
 
----
-
-Return the structured JSON:"""
+JSON output:"""
 
 
 def parse_resume_with_gemma(
-    resume_text: str, 
-    api_key: str
+    resume_text: str,
+    api_key: str,
+    max_retries: int = 3,
+    retry_delay: float = 2.0
 ) -> ParsedResume:
     """
     Parse resume text into structured JSON using gemma-3-27b-it via Google AI Studio.
+    Includes retry logic for handling transient failures.
     
     Args:
         resume_text: The text extracted from the resume
         api_key: Google AI Studio API key
+        max_retries: Maximum number of retry attempts (default: 3)
+        retry_delay: Initial delay between retries in seconds (default: 2.0)
         
     Returns:
         ParsedResume object with structured data
+        
+    Raises:
+        ValueError: If all retry attempts fail
     """
     if not GOOGLE_GENAI_AVAILABLE:
         raise ImportError("google-generativeai library not available")
@@ -275,38 +248,64 @@ def parse_resume_with_gemma(
     # Use replace() instead of format() to avoid issues with curly braces in resume text
     prompt = PARSING_PROMPT.replace("{resume_text}", resume_text)
     
-    # Generate response
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.1,
-            max_output_tokens=8192,
-        )
-    )
+    last_error = None
+    last_response_text = ""
     
-    if not response.text:
-        raise ValueError("Empty response from parsing API")
+    for attempt in range(max_retries):
+        try:
+            # Generate response
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=8192,
+                )
+            )
+            
+            if not response.text:
+                raise ValueError("Empty response from parsing API")
+            
+            # Clean up response text
+            response_text = response.text.strip()
+            last_response_text = response_text
+            
+            # Remove markdown code blocks if present
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            elif response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
+            # Parse JSON into Pydantic model
+            parsed_data = json.loads(response_text)
+            parsed_resume = ParsedResume(**parsed_data)
+            
+            # Success! Return the parsed resume
+            if attempt > 0:
+                print(f"✅ Successfully parsed resume after {attempt + 1} attempts")
+            return parsed_resume
+            
+        except (json.JSONDecodeError, Exception) as e:
+            last_error = e
+            last_response_text = response.text if hasattr(response, 'text') and response.text else last_response_text
+            
+            if attempt < max_retries - 1:
+                # Calculate exponential backoff delay
+                current_delay = retry_delay * (2 ** attempt)
+                print(f"⚠️ Attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
+                print(f"   Retrying in {current_delay:.1f} seconds...")
+                time.sleep(current_delay)
+            else:
+                # All retries exhausted
+                break
     
-    # Clean up response text
-    response_text = response.text.strip()
-    
-    # Remove markdown code blocks if present
-    if response_text.startswith("```json"):
-        response_text = response_text[7:]
-    elif response_text.startswith("```"):
-        response_text = response_text[3:]
-    if response_text.endswith("```"):
-        response_text = response_text[:-3]
-    response_text = response_text.strip()
-    
-    # Parse JSON into Pydantic model
-    try:
-        parsed_data = json.loads(response_text)
-        return ParsedResume(**parsed_data)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse API response as JSON: {e}")
-    except Exception as e:
-        raise ValueError(f"Failed to validate response schema: {e}")
+    # All retries failed
+    error_msg = f"Failed to parse resume after {max_retries} attempts.\n"
+    error_msg += f"Last error: {last_error}\n"
+    error_msg += f"Last response:\n{last_response_text[:1000]}"
+    raise ValueError(error_msg)
 
 
 # ============================================================================
