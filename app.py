@@ -625,15 +625,26 @@ def tailor_resume_with_model_router(
             
             # Check for rate limit (429) or quota errors
             is_rate_limit = any(x in error_str for x in ['429', 'rate limit', 'quota', 'resource exhausted'])
+            is_quota_exceeded = 'quota exceeded' in error_str or 'limit: 0' in error_str
             
             if attempt < max_retries - 1:
                 # Calculate exponential backoff delay
                 current_delay = retry_delay * (2 ** attempt)
-                if is_rate_limit:
+                
+                if is_quota_exceeded:
+                    # All Gemini models share the same quota on free tier
+                    # Skip directly to Gemma 3 27B (unlimited)
+                    print(f"⚠️ Quota exceeded for {model_name}. Skipping to Gemma 3 27B...")
+                    model_name = "gemma-3-27b-it"
+                    # Mark all Gemini tiers as exhausted
+                    for m in model_router.MODELS[:3]:  # First 3 are Gemini models
+                        st.session_state[f"model_counter_{m['name']}"] = m['limit']
+                elif is_rate_limit:
                     current_delay *= 2  # Extra delay for rate limits
                     print(f"⚠️ Rate limit hit (429). Waiting longer...")
                     # Try next tier model on rate limit
                     model_name = None  # Force model router to select next tier
+                    
                 print(f"⚠️ Tailoring attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
                 print(f"   Retrying in {current_delay:.1f} seconds...")
                 time.sleep(current_delay)
