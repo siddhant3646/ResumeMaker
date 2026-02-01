@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""
+API Key Encryption Script
+
+This script encrypts your API keys locally using a password.
+The encrypted strings can be safely committed to your GitHub repository.
+When the Streamlit app runs on the server, it uses the password from
+environment variables (st.secrets) to decrypt the keys.
+
+Usage:
+    python encrypt_keys.py
+
+Then follow the prompts to encrypt your API keys.
+"""
+
+import base64
+import getpass
+import os
+
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+
+def derive_key_from_password(password: str, salt: bytes = None) -> tuple[bytes, bytes]:
+    """
+    Derive an encryption key from a password using PBKDF2.
+    
+    Args:
+        password: The password to derive the key from
+        salt: Optional salt (generated if not provided)
+        
+    Returns:
+        Tuple of (key, salt)
+    """
+    if salt is None:
+        salt = os.urandom(16)
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=480000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key, salt
+
+
+def encrypt_api_key(api_key: str, password: str) -> str:
+    """
+    Encrypt an API key using Fernet symmetric encryption.
+    
+    Args:
+        api_key: The API key to encrypt
+        password: The password to use for encryption
+        
+    Returns:
+        Base64-encoded encrypted string (salt + encrypted_data)
+    """
+    key, salt = derive_key_from_password(password)
+    f = Fernet(key)
+    encrypted_data = f.encrypt(api_key.encode())
+    # Combine salt and encrypted data, then base64 encode
+    combined = salt + encrypted_data
+    return base64.urlsafe_b64encode(combined).decode()
+
+
+def decrypt_api_key(encrypted_string: str, password: str) -> str:
+    """
+    Decrypt an API key using Fernet symmetric encryption.
+    
+    Args:
+        encrypted_string: The encrypted API key string (from encrypt_api_key)
+        password: The password used for encryption
+        
+    Returns:
+        The decrypted API key
+    """
+    # Decode from base64
+    combined = base64.urlsafe_b64decode(encrypted_string.encode())
+    # Extract salt (first 16 bytes) and encrypted data
+    salt = combined[:16]
+    encrypted_data = combined[16:]
+    # Derive key and decrypt
+    key, _ = derive_key_from_password(password, salt)
+    f = Fernet(key)
+    return f.decrypt(encrypted_data).decode()
+
+
+def main():
+    """Main function to run the encryption tool."""
+    print("=" * 60)
+    print("🔐 API Key Encryption Tool")
+    print("=" * 60)
+    print("\nThis tool encrypts your API keys for secure storage in GitHub.")
+    print("The encrypted strings will be stored in your Streamlit secrets.")
+    print("\n" + "-" * 60)
+    
+    # Get the encryption password (must match what you'll set in Streamlit secrets)
+    print("\n📌 IMPORTANT: Use the SAME password you'll set in Streamlit secrets!")
+    print("   Set this in: https://share.streamlit.io/ → Your App → Secrets")
+    print("   As: ENCRYPTION_PASSWORD = 'your_password_here'")
+    print()
+    
+    password = getpass.getpass("Enter encryption password: ")
+    password_confirm = getpass.getpass("Confirm encryption password: ")
+    
+    if password != password_confirm:
+        print("\n❌ Error: Passwords do not match!")
+        return
+    
+    if len(password) < 8:
+        print("\n❌ Error: Password must be at least 8 characters long!")
+        return
+    
+    print("\n" + "=" * 60)
+    print("Now let's encrypt your API keys:")
+    print("=" * 60)
+    
+    # Google AI Studio API Key
+    print("\n🔑 Google AI Studio API Key (for gemma-3-27b-it parsing)")
+    print("   Get it from: https://makersuite.google.com/app/apikey")
+    google_key = getpass.getpass("   Enter Google AI Studio API Key: ").strip()
+    
+    if google_key:
+        encrypted_google = encrypt_api_key(google_key, password)
+        print(f"\n   ✅ Encrypted Google AI Key:")
+        print(f"   {encrypted_google}")
+    else:
+        encrypted_google = None
+        print("   ⚠️ Skipped (no key provided)")
+    
+    # Groq API Key
+    print("\n🔑 Groq API Key (for resume generation)")
+    print("   Get it from: https://console.groq.com/keys")
+    groq_key = getpass.getpass("   Enter Groq API Key: ").strip()
+    
+    if groq_key:
+        encrypted_groq = encrypt_api_key(groq_key, password)
+        print(f"\n   ✅ Encrypted Groq API Key:")
+        print(f"   {encrypted_groq}")
+    else:
+        encrypted_groq = None
+        print("   ⚠️ Skipped (no key provided)")
+    
+    # Save to file
+    print("\n" + "=" * 60)
+    print("💾 Saving encrypted keys to '.encrypted_keys' file...")
+    print("=" * 60)
+    
+    with open(".encrypted_keys", "w") as f:
+        f.write("# Encrypted API Keys - Generated by encrypt_keys.py\n")
+        f.write("# Add these to your Streamlit secrets (https://share.streamlit.io/)\n")
+        f.write("# Or to .streamlit/secrets.toml for local testing\n\n")
+        f.write(f"ENCRYPTION_PASSWORD = \"{password}\"\n\n")
+        if encrypted_google:
+            f.write(f"GOOGLE_API_KEY_ENCRYPTED = \"{encrypted_google}\"\n")
+        if encrypted_groq:
+            f.write(f"GROQ_API_KEY_ENCRYPTED = \"{encrypted_groq}\"\n")
+    
+    print("\n✅ Encrypted keys saved to '.encrypted_keys'")
+    print("\n" + "=" * 60)
+    print("📋 NEXT STEPS:")
+    print("=" * 60)
+    print("""
+1. Copy the contents of '.encrypted_keys' to Streamlit Cloud:
+   → Go to https://share.streamlit.io/
+   → Click your app → Secrets
+   → Paste the key-value pairs
+
+2. For local testing, create .streamlit/secrets.toml:
+   mkdir -p .streamlit
+   cp .encrypted_keys .streamlit/secrets.toml
+
+3. Add '.encrypted_keys' to your .gitignore if you want to keep it local:
+   echo '.encrypted_keys' >> .gitignore
+   
+4. NEVER commit the unencrypted API keys or this password to GitHub!
+
+5. Run the app locally to test:
+   streamlit run app.py
+""")
+    
+    # Verification
+    print("=" * 60)
+    print("🔍 Verification (testing decryption)...")
+    print("=" * 60)
+    
+    try:
+        if encrypted_google:
+            decrypted = decrypt_api_key(encrypted_google, password)
+            masked = decrypted[:4] + "*" * (len(decrypted) - 8) + decrypted[-4:]
+            print(f"\n✅ Google API Key decryption successful: {masked}")
+        
+        if encrypted_groq:
+            decrypted = decrypt_api_key(encrypted_groq, password)
+            masked = decrypted[:4] + "*" * (len(decrypted) - 8) + decrypted[-4:]
+            print(f"✅ Groq API Key decryption successful: {masked}")
+        
+        print("\n🎉 All tests passed! Your encryption setup is ready.")
+        
+    except Exception as e:
+        print(f"\n❌ Decryption test failed: {e}")
+        print("   Please re-run the script.")
+
+
+if __name__ == "__main__":
+    main()
