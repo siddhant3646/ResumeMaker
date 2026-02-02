@@ -879,10 +879,10 @@ class ResumePDF(FPDF):
             # Icon
             if icon_file and (ASSETS_DIR / icon_file).exists():
                 try:
-                    self.image(str(ASSETS_DIR / icon_file), x=x, y=y + 0.5, h=icon_size - 1)
+                    self.image(str(ASSETS_DIR / icon_file), x=x, y=y + 0.8, h=icon_size - 0.5)
                 except Exception:
                     pass
-                x += icon_size + gap
+                x += icon_size + gap + 1  # Extra space after icon
             
             # Text
             sanitized = self.sanitize_text(text)
@@ -992,113 +992,75 @@ class ResumePDF(FPDF):
             self.set_text_color(*BLACK)
             self.multi_cell(0, 5, self.sanitize_text(proj.description),
                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            self.ln(1)
+            self.ln(3)  # Extra space after project
     
     def write_bullet_with_bold(self, text: str, line_height: float = 5):
         """Write a bullet point with bold first words, metrics and ATS keywords."""
         import re
         
         text = self.sanitize_text(text)
+        if not text:
+            return
         
-        # Patterns for metrics
-        metric_patterns = [
-            r'\d+[%+]', r'\d+\s*(?:ms|milliseconds?)', r'\d+\s*(?:seconds?|secs?)',
-            r'\d+\s*(?:minutes?|mins?)', r'\d+\s*(?:hours?|hrs?)', r'\d+\s*(?:days?|weeks?|months?)',
-            r'\d+\s*x\b', r'\$[\d,]+[MKB]?', r'\d+[KMB]\+?\s*(?:users?|requests?|transactions?|daily)?',
-            r'\d+\+?\s*(?:microservices?|services?|APIs?)', r'P\d+\s*(?:latency|response)',
-            r'\d+\.\d+%', r'\d+\+\s*(?:clients?|stories|defects|members?)',
-        ]
-        metric_pattern = '(' + '|'.join(metric_patterns) + ')'
+        # Simple approach: just bold the first 3 words
+        first_three_match = re.match(r'^(\s*\w+\s+\w+\s+\w+)(.*)$', text)
         
-        # ATS keywords to bold
-        ats_keywords = [
-            'Java', 'Python', 'JavaScript', 'TypeScript', 'Go', 'Rust', 'C++', 'C#', 'Scala', 'Kotlin',
-            'React', 'React.js', 'Angular', 'Vue', 'Next.js', 'HTML', 'CSS', 'SASS', 'Redux',
-            'Node.js', 'Express', 'Spring Boot', 'Spring', 'Django', 'FastAPI', 'Flask', 'NestJS',
-            'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Oracle', 'SQL', 'NoSQL',
-            'AWS', 'EC2', 'S3', 'Lambda', 'RDS', 'CloudWatch', 'ECS', 'EKS', 'GCP', 'Azure',
-            'Docker', 'Kubernetes', 'K8s', 'Terraform', 'Ansible', 'Helm',
-            'CI/CD', 'Jenkins', 'GitLab', 'GitHub', 'Git', 'CircleCI', 'ArgoCD',
-            'Kafka', 'RabbitMQ', 'SQS', 'SNS', 'Apache Kafka', 'Apache Flink', 'Apache Spark', 'Apache Airflow',
-            'REST', 'RESTful', 'GraphQL', 'gRPC', 'API', 'APIs', 'OAuth', 'JWT', 'OWASP',
-            'Microservices', 'Serverless', 'Event-driven',
-            'Spark', 'DBT', 'TensorFlow', 'PyTorch', 'ML', 'AI', 'YOLOv10',
-            'Grafana', 'Prometheus', 'Splunk', 'Datadog', 'Postman', 'Fortify',
-            'Agile', 'Scrum', 'Kanban', 'TDD', 'BDD', 'DevOps', 'SRE', 'SOLID',
-            'Architected', 'Engineered', 'Designed', 'Authored', 'Developed', 'Implemented', 'Deployed',
-            'Optimized', 'Reduced', 'Increased', 'Improved', 'Achieved', 'Slashed', 'Accelerated',
-            'Led', 'Managed', 'Directed', 'Spearheaded', 'Championed', 'Pioneered', 'Mentored',
-            'Built', 'Created', 'Automated', 'Migrated', 'Integrated', 'Collaborated', 'Orchestrated',
-            'Resolved', 'Revamped', 'Strengthened', 'Audited', 'Secured', 'Hardened',
-            'Fiserv', 'GitLab', 'SpringBoot', 'Typescript', 'React.js', 'Node.Js',
-            'Git', 'MySQL', 'NoSQL', 'Jira', 'Kubernetes', 'Splunk', 'Postman', 'Grafana', 'Confluence',
-        ]
-        
-        keyword_pattern = r'\b(' + '|'.join(re.escape(k) for k in sorted(ats_keywords, key=len, reverse=True)) + r')\b'
-        
-        # Find all bold segments
-        bold_segments = set()
-        
-        # Bold first 3 words
-        first_three_words = re.match(r'^(\W*\w+\W+\w+\W+\w+)', text)
-        if first_three_words:
-            bold_segments.add((first_three_words.start(), first_three_words.end()))
-        
-        for match in re.finditer(metric_pattern, text, re.IGNORECASE):
-            bold_segments.add((match.start(), match.end()))
-        for match in re.finditer(keyword_pattern, text, re.IGNORECASE):
-            bold_segments.add((match.start(), match.end()))
-        
-        # Sort and merge
-        bold_list = sorted(bold_segments, key=lambda x: x[0])
-        merged = []
-        for start, end in bold_list:
-            if merged and start <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
-            else:
-                merged.append((start, end))
-        
-        # Build segments with font info
-        segments = []
-        pos = 0
-        for start, end in merged:
-            if pos < start:
-                segments.append((text[pos:start], False))
-            segments.append((text[start:end], True))
-            pos = end
-        if pos < len(text):
-            segments.append((text[pos:], False))
-        
-        # Print bullet and segments using write() for proper wrapping
         bullet_indent = 6
-        x_start = self.get_x()
-        y = self.get_y()
+        right_margin = self.w - self.r_margin
         
-        # Print bullet
+        # Start bullet
         self.set_font("Times", "", 10)
-        self.set_xy(x_start, y)
-        self.cell(3, line_height, chr(149))
-        self.set_xy(x_start + bullet_indent, y)
+        bullet_x = self.get_x()
+        bullet_y = self.get_y()
+        self.cell(3, line_height, chr(149), new_x=XPos.RIGHT, new_y=YPos.LAST)
         
-        # Print segments
-        for segment_text, is_bold in segments:
-            words = segment_text.split(' ')
-            for word in words:
-                if not word:
-                    continue
+        if first_three_match:
+            first_three = first_three_match.group(1).strip()
+            remainder = first_three_match.group(2)
+            
+            # Bold first three words
+            self.set_font("Times", "B", 10)
+            words = first_three.split()
+            for i, word in enumerate(words):
+                word_to_write = word + (' ' if i < len(words) - 1 or remainder else '')
+                word_width = self.get_string_width(word_to_write)
                 
-                # Set font
-                self.set_font("Times", "B" if is_bold else "", 10)
-                
-                # Check if word fits on current line
-                word_width = self.get_string_width(word + ' ')
-                if self.get_x() + word_width > self.w - self.r_margin:
-                    # New line
+                if self.get_x() + word_width > right_margin - 5:
                     self.ln(line_height)
                     self.set_x(self.l_margin + bullet_indent)
                 
-                # Write word
-                self.write(line_height, word + ' ')
+                self.write(line_height, word_to_write)
+            
+            # Normal remainder
+            if remainder:
+                self.set_font("Times", "", 10)
+                remainder = remainder.strip()
+                words = remainder.split()
+                for i, word in enumerate(words):
+                    word_to_write = word + (' ' if i < len(words) - 1 else '')
+                    word_width = self.get_string_width(word_to_write)
+                    
+                    if self.get_x() + word_width > right_margin - 5:
+                        self.ln(line_height)
+                        self.set_x(self.l_margin + bullet_indent)
+                    
+                    self.write(line_height, word_to_write)
+        else:
+            # No match, just write normal text
+            self.set_font("Times", "", 10)
+            words = text.split()
+            for i, word in enumerate(words):
+                word_to_write = word + (' ' if i < len(words) - 1 else '')
+                word_width = self.get_string_width(word_to_write)
+                
+                if self.get_x() + word_width > right_margin - 5:
+                    self.ln(line_height)
+                    self.set_x(self.l_margin + bullet_indent)
+                
+                self.write(line_height, word_to_write)
+        
+        # End bullet with line break
+        self.ln(line_height)
     
     def add_achievements(self, achievements: list[str]):
         """Add achievements section."""
