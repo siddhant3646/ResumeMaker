@@ -1,18 +1,22 @@
 """
-Resume Renderer - Simple FPDF2 implementation
-Uses multi_cell with proper cursor positioning.
+Resume Renderer - Unified FPDF2 implementation
+Supports both TailoredResume and ParsedResume models.
+Works with CLI and Streamlit use cases.
 """
 
 import os
 import re
 import unicodedata
+from io import BytesIO
 from pathlib import Path
+from typing import Any, Optional, Union
+
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from pypdf import PdfReader
 
 
-PURPLE = (75, 0, 130)  # Keep for reference but using black
+# Color constants
 BLACK = (0, 0, 0)
 ASSETS_DIR = Path(__file__).parent / "assets"
 
@@ -37,13 +41,13 @@ def sanitize_unicode_for_pdf(text: str) -> str:
         '\u201d': '"',  # Right double quotation mark
         '\u201e': '"',  # Double low-9 quotation mark
         '\u201f': '"',  # Double high-reversed-9 quotation mark
-        # Dashes - Standardize to em dash for consistency
-        '\u2010': '—',  # Hyphen -> em dash
-        '\u2011': '—',  # Non-breaking hyphen -> em dash
-        '\u2012': '—',  # Figure dash -> em dash
-        '\u2013': '—',  # En dash -> em dash
-        '\u2014': '—',  # Em dash (keep)
-        '\u2015': '—',  # Horizontal bar -> em dash
+        # Dashes - Standardize to hyphen for consistency
+        '\u2010': '-',  # Hyphen -> hyphen
+        '\u2011': '-',  # Non-breaking hyphen -> hyphen
+        '\u2012': '-',  # Figure dash -> hyphen
+        '\u2013': '-',  # En dash -> hyphen
+        '\u2014': '-',  # Em dash -> hyphen
+        '\u2015': '-',  # Horizontal bar -> hyphen
         # Spaces and separators
         '\u00a0': ' ',  # Non-breaking space
         '\u202f': ' ',  # Narrow no-break space
@@ -64,6 +68,15 @@ def sanitize_unicode_for_pdf(text: str) -> str:
         '\u00f7': '/',    # Division sign
         '\u2022': '-',    # Bullet point
         '\u25cf': '-',    # Black circle (bullet)
+        # Other common Unicode
+        '—': '-',   # Em dash
+        '–': '-',   # En dash
+        '…': '...', # Ellipsis
+        '•': '-',   # Bullet
+        ''': "'",   # Left single quote
+        ''': "'",   # Right single quote
+        '"': '"',  # Left double quote
+        '"': '"',  # Right double quote
     }
     
     # Replace known Unicode characters
@@ -84,11 +97,14 @@ def sanitize_unicode_for_pdf(text: str) -> str:
 
 
 class ResumePDF(FPDF):
+    """PDF generator for ATS-friendly resumes."""
+    
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
-        
+    
     def section_header(self, title: str):
+        """Draw a section header with underline."""
         title = sanitize_unicode_for_pdf(title)
         self.set_font("Times", "B", 11)
         self.set_text_color(*BLACK)
@@ -98,62 +114,222 @@ class ResumePDF(FPDF):
         self.set_text_color(*BLACK)
         self.ln(1)
     
-    def icon_text_line(self, items: list, icon_size: float = 3.5):
-        """Render a centered line with icon+text pairs.
-        items: list of tuples [(icon_filename or None, text), ...]
-        """
-        # Sanitize all text items
-        sanitized_items = [(icon_file, sanitize_unicode_for_pdf(text)) for icon_file, text in items]
+    def add_header_info(self, basics: Any):
+        """Add name and contact information header - ATS optimized text-based layout."""
+        # Name - centered and bold (larger)
+        self.set_font("Times", "B", 20)
+        self.set_text_color(*BLACK)
+        name = sanitize_unicode_for_pdf(basics.name)
+        self.cell(0, 10, name, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
-        self.set_font("Times", "", 9)
-        self.set_text_color(0, 0, 0)
+        # Contact info line: Phone | Email | Location
+        self.set_font("Times", "", 10)
+        self.set_text_color(*BLACK)
         
-        gap = 1.5  # consistent gap between all elements
-        separator = "|"
-        sep_width = self.get_string_width(separator)
+        contact_parts = []
+        if basics.phone:
+            contact_parts.append(basics.phone)
+        if basics.email:
+            contact_parts.append(basics.email)
+        if basics.location:
+            contact_parts.append(basics.location)
         
-        # Calculate total width
-        total_width = 0
-        for i, (icon_file, text) in enumerate(sanitized_items):
-            if i > 0:
-                total_width += gap + sep_width + gap  # gap | gap
-            if icon_file and (ASSETS_DIR / icon_file).exists():
-                total_width += icon_size + gap  # icon + gap before text
-            total_width += self.get_string_width(text)
+        if contact_parts:
+            contact_line = " | ".join(contact_parts)
+            contact_line = sanitize_unicode_for_pdf(contact_line)
+            self.cell(0, 6, contact_line, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
-        # Start from center
-        x = (self.w - total_width) / 2
-        y = self.get_y()
-        
-        for i, (icon_file, text) in enumerate(sanitized_items):
-            # Separator between items
-            if i > 0:
-                x += gap
-                self.set_xy(x, y)
-                self.cell(sep_width, icon_size, separator)
-                x += sep_width + gap
+        # Links line: LinkedIn: username | GitHub: username
+        if basics.links:
+            link_parts = []
+            for link in basics.links[:2]:
+                clean_link = link.replace("https://", "").replace("http://", "")
+                if "linkedin" in link.lower():
+                    link_parts.append(f"LinkedIn: {clean_link}")
+                elif "github" in link.lower():
+                    link_parts.append(f"GitHub: {clean_link}")
+                else:
+                    link_parts.append(clean_link)
             
-            # Icon
-            if icon_file and (ASSETS_DIR / icon_file).exists():
-                try:
-                    self.image(str(ASSETS_DIR / icon_file), x=x, y=y + 0.5, h=icon_size - 1)
-                except Exception:
-                    # If icon fails to render, skip it
-                    pass
-                x += icon_size + gap
-            
-            # Text
-            text_w = self.get_string_width(text)
-            self.set_xy(x, y)
-            self.cell(text_w, icon_size, text)
-            x += text_w
+            if link_parts:
+                links_line = " | ".join(link_parts)
+                links_line = sanitize_unicode_for_pdf(links_line)
+                self.set_font("Times", "", 10)
+                self.cell(0, 6, links_line, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
-        self.ln(icon_size + 2)
+        # Separator line below header
+        self.set_draw_color(*BLACK)
+        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+        self.ln(2)
+    
+    def add_summary(self, summary: str):
+        """Add professional summary section with bold formatting for keywords and metrics."""
+        if not summary:
+            return
+            
+        self.section_header("Professional Summary")
+        
+        # Apply bold formatting to keywords and metrics in summary
+        summary_text = sanitize_unicode_for_pdf(summary)
+        if summary_text and not summary_text.endswith(('.', '!', '?')):
+            summary_text += '.'
+        
+        self.set_font("Times", "", 10)
+        self.set_text_color(*BLACK)
+        self.write_bullet_with_bold(summary_text, line_height=5)
+        self.ln(2)
+    
+    def add_skills(self, skills: Any):
+        """Add skills section."""
+        if not skills:
+            return
+            
+        self.section_header("Technical Skills")
+        self.set_font("Times", "", 10)
+        self.set_text_color(*BLACK)
+        
+        # Handle both object attribute and dict access patterns
+        languages = getattr(skills, 'languages_frameworks', None) or skills.get('languages_frameworks', [])
+        tools = getattr(skills, 'tools', None) or skills.get('tools', [])
+        
+        if languages:
+            self.set_font("Times", "B", 10)
+            self.cell(0, 5, "Languages & Frameworks: ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.set_font("Times", "", 10)
+            self.multi_cell(0, 5, sanitize_unicode_for_pdf(", ".join(languages)),
+                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        if tools:
+            self.set_font("Times", "B", 10)
+            self.cell(0, 5, "Tools & Platforms: ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.set_font("Times", "", 10)
+            self.multi_cell(0, 5, sanitize_unicode_for_pdf(", ".join(tools)),
+                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        self.ln(2)
+    
+    def add_experience(self, experiences: list):
+        """Add work experience section."""
+        if not experiences:
+            return
+            
+        self.section_header("Professional Experience")
+        
+        for exp in experiences:
+            # Company and Role
+            self.set_font("Times", "B", 10)
+            self.set_text_color(*BLACK)
+            
+            # Handle both object and dict access
+            company = getattr(exp, 'company', None) or exp.get('company', '')
+            location = getattr(exp, 'location', None) or exp.get('location', '')
+            role = getattr(exp, 'role', None) or exp.get('role', '')
+            start_date = getattr(exp, 'startDate', None) or exp.get('startDate', '')
+            end_date = getattr(exp, 'endDate', None) or exp.get('endDate', '')
+            bullets = getattr(exp, 'bullets', None) or exp.get('bullets', [])
+            
+            self.cell(0, 5, sanitize_unicode_for_pdf(role), new_x=XPos.RIGHT, new_y=YPos.LAST)
+            
+            # Date on the right
+            date_str = f"{start_date} — {end_date}"
+            self.cell(0, 5, sanitize_unicode_for_pdf(date_str), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            # Company and Location
+            self.set_font("Times", "I", 10)
+            self.set_text_color(*BLACK)
+            self.cell(0, 5, sanitize_unicode_for_pdf(f"{company} | {location}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.ln(1)
+            
+            # Bullets with bold keywords
+            for bullet in bullets:
+                self.write_bullet_with_bold(bullet)
+            
+            self.ln(2)
+    
+    def add_education(self, education: list):
+        """Add education section."""
+        if not education:
+            return
+            
+        self.section_header("Education")
+        
+        for edu in education:
+            # Handle both object and dict access
+            institution = getattr(edu, 'institution', None) or edu.get('institution', '')
+            location = getattr(edu, 'location', None) or edu.get('location', '')
+            study_type = getattr(edu, 'studyType', None) or edu.get('studyType', '')
+            area = getattr(edu, 'area', None) or edu.get('area', '')
+            start_date = getattr(edu, 'startDate', None) or edu.get('startDate', '')
+            end_date = getattr(edu, 'endDate', None) or edu.get('endDate', '')
+            
+            # Degree and Field
+            self.set_font("Times", "B", 10)
+            self.set_text_color(*BLACK)
+            self.cell(0, 5, sanitize_unicode_for_pdf(f"{study_type} in {area}"),
+                     new_x=XPos.RIGHT, new_y=YPos.LAST)
+            
+            # Date on right
+            date_str = f"{start_date} — {end_date}"
+            self.cell(0, 5, sanitize_unicode_for_pdf(date_str), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            # Institution and Location
+            self.set_font("Times", "I", 10)
+            self.set_text_color(*BLACK)
+            self.cell(0, 5, sanitize_unicode_for_pdf(f"{institution} | {location}"),
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.ln(1)
+    
+    def add_projects(self, projects: list):
+        """Add projects section."""
+        if not projects:
+            return
+            
+        self.section_header("Projects")
+        
+        for proj in projects:
+            # Handle both object and dict access
+            name = getattr(proj, 'name', None) or proj.get('name', '')
+            tech_stack = getattr(proj, 'techStack', None) or proj.get('techStack', '')
+            description = getattr(proj, 'description', None) or proj.get('description', '')
+            
+            # Project name
+            self.set_font("Times", "B", 10)
+            self.set_text_color(*BLACK)
+            self.cell(0, 5, sanitize_unicode_for_pdf(name), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            # Tech stack
+            self.set_font("Times", "B", 9)
+            self.set_text_color(*BLACK)
+            self.cell(0, 4, sanitize_unicode_for_pdf(f"Tech Stack: {tech_stack}"),
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            # Description with bold formatting for keywords and metrics
+            desc = description
+            if desc and not desc.endswith(('.', '!', '?')):
+                desc += '.'
+            self.set_font("Times", "", 10)
+            self.set_text_color(*BLACK)
+            self.cell(4, 5, " ")  # Indent
+            self.write_bullet_with_bold(desc, line_height=5)
+            self.ln(1)  # Space after project
+    
+    def add_achievements(self, achievements: list):
+        """Add achievements section."""
+        if not achievements:
+            return
+            
+        self.section_header("Achievements")
+        
+        for achievement in achievements:
+            self.write_bullet_with_bold(achievement)
+        
+        self.ln(2)
     
     def write_bullet_with_bold(self, text: str, line_height: float = 5):
         """Write a bullet point with bold first words, metrics and ATS keywords."""
-        # Sanitize text to remove Unicode characters that FPDF doesn't support
         text = sanitize_unicode_for_pdf(text)
+        if not text:
+            return
         
         # Comprehensive patterns for metrics
         metric_patterns = [
@@ -175,7 +351,7 @@ class ResumePDF(FPDF):
         ]
         metric_pattern = '(' + '|'.join(metric_patterns) + ')'
         
-        # Expanded ATS keywords to bold - Comprehensive industry terminology coverage
+        # ATS keywords to bold
         ats_keywords = [
             # Programming Languages
             'Java', 'Python', 'JavaScript', 'TypeScript', 'Go', 'Golang', 'Rust', 'C++', 'C#', 'Ruby', 'PHP', 'Scala', 'Kotlin',
@@ -226,7 +402,7 @@ class ResumePDF(FPDF):
             'Coverage', 'Accuracy', 'Precision', 'Recall',
         ]
         
-        # Build regex for keywords - case insensitive matching but preserve original case in output
+        # Build regex for keywords - case insensitive matching
         keyword_pattern = r'\b(' + '|'.join(re.escape(k) for k in sorted(ats_keywords, key=len, reverse=True)) + r')\b'
         
         # Find all bold segments
@@ -237,15 +413,16 @@ class ResumePDF(FPDF):
         if first_three_words:
             bold_segments.add((first_three_words.start(), first_three_words.end()))
         
+        # Find metrics
         for match in re.finditer(metric_pattern, text, re.IGNORECASE):
             bold_segments.add((match.start(), match.end()))
+        
+        # Find ATS keywords
         for match in re.finditer(keyword_pattern, text, re.IGNORECASE):
             bold_segments.add((match.start(), match.end()))
         
-        # Sort by position
+        # Sort by position and merge overlapping segments
         bold_list = sorted(bold_segments, key=lambda x: x[0])
-        
-        # Merge overlapping segments
         merged = []
         for start, end in bold_list:
             if merged and start <= merged[-1][1]:
@@ -253,68 +430,66 @@ class ResumePDF(FPDF):
             else:
                 merged.append((start, end))
         
-        # Write text with mixed fonts using cell() for better compatibility
-        pos = 0
-        x_start = self.get_x()
-        y = self.get_y()
-        page_width = self.w - self.r_margin
+        # Render text with bold segments
+        bullet_indent = 6
+        right_margin = self.w - self.r_margin
         
+        # Start bullet
+        self.set_font("Times", "", 10)
+        bullet_x = self.get_x()
+        bullet_y = self.get_y()
+        self.cell(3, line_height, chr(149), new_x=XPos.RIGHT, new_y=YPos.LAST)
+        
+        pos = 0
         for start, end in merged:
-            # Normal text before
+            # Normal text before bold segment
             if pos < start:
                 self.set_font("Times", "", 10)
                 normal_text = text[pos:start]
-                # Check if we need to wrap
-                text_width = self.get_string_width(normal_text)
-                if x_start + text_width > page_width:
-                    # Print what fits
-                    self.set_xy(x_start, y)
-                    self.cell(0, line_height, normal_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                    x_start = self.l_margin
-                    y = self.get_y()
-                else:
-                    self.set_xy(x_start, y)
-                    self.cell(text_width, line_height, normal_text)
-                    x_start += text_width
+                words = normal_text.split()
+                for i, word in enumerate(words):
+                    word_to_write = word + (' ' if i < len(words) - 1 else '')
+                    word_width = self.get_string_width(word_to_write)
+                    
+                    if self.get_x() + word_width > right_margin - 5:
+                        self.ln(line_height)
+                        self.set_x(self.l_margin + bullet_indent)
+                    
+                    self.write(line_height, word_to_write)
             
-            # Bold text
-            bold_text = text[start:end]
+            # Bold text segment
             self.set_font("Times", "B", 10)
-            text_width = self.get_string_width(bold_text)
-            if x_start + text_width > page_width:
-                self.set_xy(x_start, y)
-                self.cell(0, line_height, bold_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                x_start = self.l_margin
-                y = self.get_y()
-            else:
-                self.set_xy(x_start, y)
-                self.cell(text_width, line_height, bold_text)
-                x_start += text_width
+            bold_text = text[start:end]
+            words = bold_text.split()
+            for i, word in enumerate(words):
+                word_to_write = word + (' ' if i < len(words) - 1 else '')
+                word_width = self.get_string_width(word_to_write)
+                
+                if self.get_x() + word_width > right_margin - 5:
+                    self.ln(line_height)
+                    self.set_x(self.l_margin + bullet_indent)
+                
+                self.write(line_height, word_to_write)
             
             pos = end
         
-        # Remaining normal text
+        # Remaining normal text after last bold segment
         if pos < len(text):
             self.set_font("Times", "", 10)
             remaining_text = text[pos:]
-            text_width = self.get_string_width(remaining_text)
-            if x_start + text_width > page_width:
-                self.set_xy(x_start, y)
-                self.cell(0, line_height, remaining_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            else:
-                self.set_xy(x_start, y)
-                self.cell(text_width, line_height, remaining_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        else:
-            self.ln(line_height)
-
-
-def get_pdf_page_count(pdf_path: str) -> int:
-    """Get the number of pages in a PDF file."""
-    try:
-        reader = PdfReader(pdf_path)
-        return len(reader.pages)
-    except Exception:
-        return 1
+            words = remaining_text.split()
+            for i, word in enumerate(words):
+                word_to_write = word + (' ' if i < len(words) - 1 else '')
+                word_width = self.get_string_width(word_to_write)
+                
+                if self.get_x() + word_width > right_margin - 5:
+                    self.ln(line_height)
+                    self.set_x(self.l_margin + bullet_indent)
+                
+                self.write(line_height, word_to_write)
+        
+        # End bullet with line break
+        self.ln(line_height)
 
 
 def generate_filename(basics_name: str) -> str:
@@ -332,12 +507,22 @@ def generate_filename(basics_name: str) -> str:
     return f"{first_name}{last_name}Resume{current_year}.pdf"
 
 
-def generate_pdf(resume, output_path: str = None, include_summary: bool = True, compact_mode: bool = False) -> str:
+def get_pdf_page_count(pdf_path: str) -> int:
+    """Get the number of pages in a PDF file."""
+    try:
+        reader = PdfReader(pdf_path)
+        return len(reader.pages)
+    except Exception:
+        return 1
+
+
+def generate_pdf(resume: Any, output_path: Optional[str] = None, 
+                 include_summary: bool = True, compact_mode: bool = False) -> str:
     """
     Generate PDF resume with optional summary and compact mode.
     
     Args:
-        resume: TailoredResume object
+        resume: Resume object (TailoredResume or ParsedResume)
         output_path: Output file path (if None, uses generated filename)
         include_summary: Whether to include the professional summary section
         compact_mode: Whether to use more compact spacing to fit on 1 page
@@ -345,230 +530,154 @@ def generate_pdf(resume, output_path: str = None, include_summary: bool = True, 
     Returns:
         Absolute path to the generated PDF
     """
+    # Handle both object and dict access for basics.name
+    if hasattr(resume, 'basics'):
+        basics = resume.basics
+    else:
+        basics = resume.get('basics', {})
+    
+    name = getattr(basics, 'name', None) or basics.get('name', 'Resume')
+    
     # Generate filename if not provided
     if output_path is None:
-        output_path = generate_filename(resume.basics.name)
+        output_path = generate_filename(name)
+    
+    # Handle output as string or Path
+    if isinstance(output_path, (str, Path)):
+        out_dir = os.path.dirname(str(output_path))
+        if out_dir and not os.path.exists(out_dir):
+            os.makedirs(out_dir)
     
     pdf = ResumePDF()
     
     # Adjust margins for compact mode
     if compact_mode:
-        pdf.set_margins(10, 5, 10)  # Even smaller top margin
+        pdf.set_margins(10, 5, 10)
     else:
-        pdf.set_margins(10, 7, 10)  # Standard minimal margins
+        pdf.set_margins(10, 7, 10)
     
     pdf.add_page()
-
-    # === HEADER: NAME ===
-    pdf.set_font("Times", "B", 20)
-    pdf.set_text_color(*BLACK)
-    name = sanitize_unicode_for_pdf(resume.basics.name)
-    pdf.multi_cell(0, 10, name, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # === HEADER: CONTACT INFO LINE (Phone | Email | Location) ===
-    pdf.set_font("Times", "", 10)
-    pdf.set_text_color(*BLACK)
     
-    contact_line = f"{resume.basics.phone} | {resume.basics.email} | {resume.basics.location}"
-    contact_line = sanitize_unicode_for_pdf(contact_line)
-    pdf.multi_cell(0, 6, contact_line, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    # Add header with name and contact info
+    pdf.add_header_info(basics)
     
-    # === HEADER: LINKS LINE (LinkedIn | GitHub) ===
-    if resume.basics.links:
-        link_parts = []
-        for link in resume.basics.links[:2]:
-            clean_link = link.replace("https://", "").replace("http://", "")
-            if "linkedin" in link.lower():
-                link_parts.append(f"LinkedIn: {clean_link}")
-            elif "github" in link.lower():
-                link_parts.append(f"GitHub: {clean_link}")
-            else:
-                link_parts.append(clean_link)
-        
-        links_line = " | ".join(link_parts)
-        links_line = sanitize_unicode_for_pdf(links_line)
-        pdf.set_font("Times", "", 10)
-        pdf.multi_cell(0, 6, links_line, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    # Add summary (optional)
+    summary = getattr(resume, 'summary', None) or resume.get('summary', '')
+    if include_summary and summary:
+        pdf.add_summary(summary)
     
-    # === HEADER: SEPARATOR LINE ===
-    pdf.set_draw_color(*BLACK)
-    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-    pdf.ln(2)
-
-    if compact_mode:
-        pdf.ln(1)
-    else:
-        pdf.ln(2)
-
-    # === PROFESSIONAL SUMMARY (Optional) ===
-    if include_summary and resume.summary:
-        pdf.section_header("Professional Summary")
-        
-        # Apply bold formatting to keywords and metrics in summary
-        summary_text = sanitize_unicode_for_pdf(resume.summary)
-        # Ensure summary ends with a period
-        summary_text = summary_text.rstrip()
-        if summary_text and not summary_text.endswith(('.', '!', '?')):
-            summary_text += '.'
-        
-        pdf.set_font("Times", "", 10)
-        pdf.write_bullet_with_bold(summary_text, line_height=5)
-        
-        if compact_mode:
-            pdf.ln(1)
-        else:
-            pdf.ln(2)
-
-    # === SKILLS ===
-    if resume.skills:
-        pdf.section_header("Skills")
-
-        # Languages & Frameworks
-        if resume.skills.languages_frameworks:
-            pdf.set_font("Times", "B", 10)
-            pdf.write(5, "Languages & Frameworks: ")
-            pdf.set_font("Times", "", 10)
-            skills_text = sanitize_unicode_for_pdf(", ".join(resume.skills.languages_frameworks))
-            pdf.write(5, skills_text)
-            pdf.ln(5)
-
-        # Tools
-        if resume.skills.tools:
-            pdf.set_font("Times", "B", 10)
-            pdf.write(5, "Tools: ")
-            pdf.set_font("Times", "", 10)
-            tools_text = sanitize_unicode_for_pdf(", ".join(resume.skills.tools))
-            pdf.write(5, tools_text)
-            pdf.ln(5)
-
-    # === EXPERIENCE ===
-    if resume.experience:
-        pdf.section_header("Work Experience")
-        for exp in resume.experience:
-            # Company, Location on left - Dates on right
-            pdf.set_font("Times", "B", 11)
-            company_text = sanitize_unicode_for_pdf(f"{exp.company}, {exp.location}")
-            date_text = sanitize_unicode_for_pdf(f"{exp.startDate} — {exp.endDate}")
-
-            # Calculate positions
-            date_width = pdf.get_string_width(date_text)
-            page_width = pdf.w - pdf.l_margin - pdf.r_margin
-
-            # Draw company on left
-            pdf.cell(page_width - date_width, 6, company_text)
-            # Draw date on right
-            pdf.cell(date_width, 6, date_text, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            # Role (italic)
-            pdf.set_font("Times", "I", 10)
-            role_text = sanitize_unicode_for_pdf(exp.role)
-            pdf.multi_cell(0, 5, role_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            # Bullets with bold keywords
-            line_height = 4.5 if compact_mode else 5
-            for bullet in exp.bullets:
-                bullet_text = bullet[:500] if len(bullet) > 500 else bullet
-                # Ensure bullet ends with a period
-                bullet_text = bullet_text.rstrip()
-                if bullet_text and not bullet_text.endswith(('.', '!', '?')):
-                    bullet_text += '.'
-                pdf.set_font("Times", "", 10)
-                pdf.cell(3, line_height, "-")  # Bullet point - reduced width
-                pdf.write_bullet_with_bold(bullet_text, line_height)
-
-            pdf.ln(1)
-
-    # === EDUCATION ===
-    if resume.education:
-        pdf.section_header("Education")
-        for edu in resume.education:
-            # Institution, Location on left - Dates on right
-            pdf.set_font("Times", "B", 11)
-            inst_text = sanitize_unicode_for_pdf(f"{edu.institution}, {edu.location}")
-            date_text = sanitize_unicode_for_pdf(f"{edu.startDate} — {edu.endDate}")
-
-            date_width = pdf.get_string_width(date_text)
-            page_width = pdf.w - pdf.l_margin - pdf.r_margin
-
-            pdf.cell(page_width - date_width, 6, inst_text)
-            pdf.cell(date_width, 6, date_text, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            # Degree info
-            pdf.set_font("Times", "I", 10)
-            degree_text = sanitize_unicode_for_pdf(f"{edu.studyType} in {edu.area}")
-            pdf.cell(3, 5, "-")
-            pdf.multi_cell(0, 5, degree_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # === PROJECTS ===
-    if resume.projects:
-        pdf.section_header("Project Work")
-        for proj in resume.projects:
-            pdf.set_font("Times", "B", 10)
-            proj_name = sanitize_unicode_for_pdf(f"  - {proj.name}")
-            pdf.multi_cell(0, 5, proj_name, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            
-            # Process description with bold formatting for keywords and metrics
-            desc = proj.description[:300] if len(proj.description) > 300 else proj.description
-            # Ensure description ends with a period
-            desc = desc.rstrip()
-            if desc and not desc.endswith(('.', '!', '?')):
-                desc += '.'
-            desc = sanitize_unicode_for_pdf(desc)
-            
-            # Apply bold formatting to keywords and metrics in description
-            pdf.set_font("Times", "", 10)
-            pdf.cell(4, 5, " ")  # Indent
-            pdf.write_bullet_with_bold(desc, line_height=5)
-            
-            # Tech stack with bold keywords
-            pdf.set_font("Times", "I", 9)
-            pdf.cell(4, 4, " ")  # Indent
-            pdf.set_font("Times", "B", 9)
-            pdf.cell(12, 4, "Tech: ")
-            pdf.set_font("Times", "I", 9)
-            tech_stack = sanitize_unicode_for_pdf(proj.techStack)
-            pdf.multi_cell(0, 4, tech_stack, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.ln(1)
-
-    # === ACHIEVEMENTS ===
-    if resume.achievements:
-        pdf.section_header("Leadership and Activities")
-        for ach in resume.achievements:
-            ach_text = ach[:400] if len(ach) > 400 else ach
-            # Ensure bullet ends with a period
-            ach_text = ach_text.rstrip()
-            if ach_text and not ach_text.endswith(('.', '!', '?')):
-                ach_text += '.'
-            pdf.set_font("Times", "", 10)
-            pdf.cell(3, 5, "-")
-            pdf.write_bullet_with_bold(ach_text)
+    # Add skills
+    skills = getattr(resume, 'skills', None) or resume.get('skills')
+    if skills:
+        pdf.add_skills(skills)
     
-    # Save
-    out_dir = os.path.dirname(output_path)
-    if out_dir and not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+    # Add experience
+    experience = getattr(resume, 'experience', None) or resume.get('experience', [])
+    if experience:
+        pdf.add_experience(experience)
     
+    # Add education
+    education = getattr(resume, 'education', None) or resume.get('education', [])
+    if education:
+        pdf.add_education(education)
+    
+    # Add projects
+    projects = getattr(resume, 'projects', None) or resume.get('projects', [])
+    if projects:
+        pdf.add_projects(projects)
+    
+    # Add achievements
+    achievements = getattr(resume, 'achievements', None) or resume.get('achievements', [])
+    if achievements:
+        pdf.add_achievements(achievements)
+    
+    # Save to file
     pdf.output(output_path)
     return os.path.abspath(output_path)
 
 
-def generate_pdf_with_page_check(resume, output_dir: str = None, max_attempts: int = 2) -> str:
+def generate_pdf_to_bytes(resume: Any, include_summary: bool = True) -> bytes:
+    """
+    Generate PDF resume and return as bytes for Streamlit compatibility.
+    
+    Args:
+        resume: Resume object (TailoredResume or ParsedResume)
+        include_summary: Whether to include the professional summary section
+        
+    Returns:
+        PDF as bytes
+    """
+    # Handle both object and dict access for basics.name
+    if hasattr(resume, 'basics'):
+        basics = resume.basics
+    else:
+        basics = resume.get('basics', {})
+    
+    pdf = ResumePDF()
+    pdf.add_page()
+    
+    # Add header with name and contact info
+    pdf.add_header_info(basics)
+    
+    # Add summary (optional)
+    summary = getattr(resume, 'summary', None) or resume.get('summary', '')
+    if include_summary and summary:
+        pdf.add_summary(summary)
+    
+    # Add skills
+    skills = getattr(resume, 'skills', None) or resume.get('skills')
+    if skills:
+        pdf.add_skills(skills)
+    
+    # Add experience
+    experience = getattr(resume, 'experience', None) or resume.get('experience', [])
+    if experience:
+        pdf.add_experience(experience)
+    
+    # Add education
+    education = getattr(resume, 'education', None) or resume.get('education', [])
+    if education:
+        pdf.add_education(education)
+    
+    # Add projects
+    projects = getattr(resume, 'projects', None) or resume.get('projects', [])
+    if projects:
+        pdf.add_projects(projects)
+    
+    # Add achievements
+    achievements = getattr(resume, 'achievements', None) or resume.get('achievements', [])
+    if achievements:
+        pdf.add_achievements(achievements)
+    
+    # Output to bytes
+    output = pdf.output()
+    return bytes(output) if isinstance(output, bytearray) else output
+
+
+def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None, 
+                                  max_attempts: int = 2) -> str:
     """
     Generate PDF with automatic 1-page constraint.
     If the resume exceeds 1 page, it will retry without the summary section.
     
     Args:
-        resume: TailoredResume object
+        resume: Resume object (TailoredResume or ParsedResume)
         output_dir: Output directory (if None, uses current directory)
         max_attempts: Maximum number of generation attempts
     
     Returns:
-        Absolute path to the generated PDF (guaranteed to be 1 page or best effort)
+        Absolute path to the generated PDF
     """
-    import tempfile
+    # Handle both object and dict access for basics.name
+    if hasattr(resume, 'basics'):
+        basics = resume.basics
+    else:
+        basics = resume.get('basics', {})
+    
+    name = getattr(basics, 'name', None) or basics.get('name', 'Resume')
     
     # Generate filename
-    filename = generate_filename(resume.basics.name)
+    filename = generate_filename(name)
     if output_dir:
         output_path = os.path.join(output_dir, filename)
     else:
@@ -582,23 +691,25 @@ def generate_pdf_with_page_check(resume, output_dir: str = None, max_attempts: i
         return pdf_path
     
     # Try 2: Generate without summary, compact mode
-    if page_count > 1 and max_attempts >= 2 and resume.summary:
+    summary = getattr(resume, 'summary', None) or resume.get('summary', '')
+    if page_count > 1 and max_attempts >= 2 and summary:
         pdf_path = generate_pdf(resume, output_path, include_summary=False, compact_mode=True)
         page_count = get_pdf_page_count(pdf_path)
         
         if page_count == 1:
             return pdf_path
     
-    # Return whatever we have (even if 2 pages, it's the best we could do)
+    # Return whatever we have
     return pdf_path
 
 
-def render_and_save_pdf(resume, output_path: str = None, ensure_single_page: bool = True) -> str:
+def render_and_save_pdf(resume: Any, output_path: Optional[str] = None, 
+                        ensure_single_page: bool = True) -> str:
     """
     Render and save PDF with optional single-page guarantee.
     
     Args:
-        resume: TailoredResume object
+        resume: Resume object (TailoredResume or ParsedResume)
         output_path: Output file path (if None, uses generated filename)
         ensure_single_page: If True, will remove summary to fit on 1 page
     
@@ -612,8 +723,29 @@ def render_and_save_pdf(resume, output_path: str = None, ensure_single_page: boo
         return generate_pdf(resume, output_path, include_summary=True, compact_mode=False)
 
 
-def preview_html(resume, output_path: str) -> str:
-    html = f"<html><body><h1>{resume.basics.name}</h1></body></html>"
+def preview_html(resume: Any, output_path: str) -> str:
+    """
+    Generate a simple HTML preview of the resume.
+    
+    Args:
+        resume: Resume object
+        output_path: Path to save the HTML file
+        
+    Returns:
+        Absolute path to the generated HTML file
+    """
+    # Handle both object and dict access
+    if hasattr(resume, 'basics'):
+        basics = resume.basics
+        name = getattr(basics, 'name', 'Resume')
+    else:
+        name = resume.get('basics', {}).get('name', 'Resume')
+    
+    html = f"<html><body><h1>{sanitize_unicode_for_pdf(name)}</h1></body></html>"
     with open(output_path, 'w') as f:
         f.write(html)
     return os.path.abspath(output_path)
+
+
+# Legacy alias for backward compatibility
+generate_resume_pdf = generate_pdf_to_bytes
