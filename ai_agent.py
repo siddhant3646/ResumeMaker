@@ -6,6 +6,7 @@ Includes Pydantic models for structured output.
 """
 
 import json
+import math
 import re
 from datetime import datetime
 from typing import List, Optional
@@ -150,12 +151,9 @@ def calculate_total_experience(experience_list: list) -> str:
     elif years < 2:
         return f"{years:.1f} years"
     else:
-        # Round to nearest half year for cleaner display
-        rounded_years = round(years * 2) / 2
-        if rounded_years == int(rounded_years):
-            return f"{int(rounded_years)}+ years"
-        else:
-            return f"{rounded_years} years"
+        # Round UP to next whole year for cleaner display (e.g., 3.6 -> 4+)
+        rounded_years = math.ceil(years)
+        return f"{int(rounded_years)}+ years"
 
 
 # ============================================================================
@@ -561,9 +559,12 @@ def force_experience_in_summary(resume: TailoredResume, total_experience: str) -
     exp_match = re.search(r'([\d.]+)', total_experience)
     if exp_match:
         exp_value = exp_match.group(1)
+        # Check if total_experience includes a '+' sign
+        has_plus = '+' in total_experience
+        exp_replacement = f"{exp_value}+ years" if has_plus else f"{exp_value} years"
         # Replace any experience pattern with the correct value
         for pattern in patterns:
-            summary = re.sub(pattern, f"{exp_value} years", summary, flags=re.IGNORECASE)
+            summary = re.sub(pattern, exp_replacement, summary, flags=re.IGNORECASE)
     
     resume.summary = summary
     return resume

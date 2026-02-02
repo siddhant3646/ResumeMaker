@@ -21,6 +21,25 @@ BLACK = (0, 0, 0)
 ASSETS_DIR = Path(__file__).parent / "assets"
 
 
+def normalize_date(date_str: str) -> str:
+    """
+    Normalize date format by adding a space between month and year if missing.
+    Converts 'Jun2022' to 'Jun 2022', 'Jan2020' to 'Jan 2020', etc.
+    """
+    if not isinstance(date_str, str):
+        return str(date_str) if date_str else ""
+    
+    import re
+    # Pattern to match month abbreviation followed immediately by year (no space)
+    # Matches: Jun2022, Jan2020, Mar2019, etc.
+    pattern = r'^([a-zA-Z]{3,})(\d{4})$'
+    match = re.match(pattern, date_str.strip())
+    if match:
+        month, year = match.groups()
+        return f"{month} {year}"
+    return date_str
+
+
 def sanitize_unicode_for_pdf(text: str) -> str:
     """
     Replace Unicode characters with ASCII equivalents for FPDF compatibility.
@@ -171,6 +190,8 @@ class ResumePDF(FPDF):
         
         # Apply bold formatting to keywords and metrics in summary
         summary_text = sanitize_unicode_for_pdf(summary)
+        # Replace newlines with spaces to prevent unwanted line breaks
+        summary_text = ' '.join(summary_text.split())
         if summary_text and not summary_text.endswith(('.', '!', '?')):
             summary_text += '.'
         
@@ -228,6 +249,10 @@ class ResumePDF(FPDF):
             end_date = getattr(exp, 'endDate', None) or exp.get('endDate', '')
             bullets = getattr(exp, 'bullets', None) or exp.get('bullets', [])
             
+            # Normalize date formats (e.g., "Jun2022" -> "Jun 2022")
+            start_date = normalize_date(start_date)
+            end_date = normalize_date(end_date)
+            
             self.cell(0, 5, sanitize_unicode_for_pdf(role), new_x=XPos.RIGHT, new_y=YPos.LAST)
             
             # Date on the right
@@ -261,6 +286,10 @@ class ResumePDF(FPDF):
             area = getattr(edu, 'area', None) or edu.get('area', '')
             start_date = getattr(edu, 'startDate', None) or edu.get('startDate', '')
             end_date = getattr(edu, 'endDate', None) or edu.get('endDate', '')
+            
+            # Normalize date formats (e.g., "Jun2022" -> "Jun 2022")
+            start_date = normalize_date(start_date)
+            end_date = normalize_date(end_date)
             
             # Degree and Field
             self.set_font("Times", "B", 10)
@@ -341,7 +370,7 @@ class ResumePDF(FPDF):
             
             if self.get_x() + word_width > right_margin - 5:
                 self.ln(line_height)
-                self.set_x(self.l_margin + bullet_indent)
+                self.set_x(self.l_margin + bullet_indent + 3)
                 word_to_write = word  # No leading space at line start
             
             self.write(line_height, word_to_write)
