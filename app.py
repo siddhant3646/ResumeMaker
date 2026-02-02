@@ -766,6 +766,7 @@ def parse_tailored_response(response_text: str) -> ParsedResume:
 
 BLACK = (0, 0, 0)
 GRAY = (80, 80, 80)
+ASSETS_DIR = Path(__file__).parent / "assets"
 
 
 class ResumePDF(FPDF):
@@ -817,21 +818,80 @@ class ResumePDF(FPDF):
         self.ln(1)
     
     def add_header_info(self, basics: Basics):
-        """Add name and contact information header."""
+        """Add name and contact information header with icons."""
         # Name - centered and bold
         self.set_font("Times", "B", 14)
         self.set_text_color(*BLACK)
         self.cell(0, 8, self.sanitize_text(basics.name), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
-        # Contact info - centered on one line
-        self.set_font("Times", "", 9)
-        contact_parts = [basics.email, basics.phone, basics.location]
-        if basics.links:
-            contact_parts.extend(basics.links[:2])  # Limit to first 2 links
+        # Contact info with icons
+        icon_size = 3.5
+        gap = 1.5
+        separator = " | "
         
-        contact_line = " | ".join(filter(None, contact_parts))
-        self.cell(0, 5, self.sanitize_text(contact_line), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.ln(2)
+        self.set_font("Times", "", 9)
+        
+        # Build contact items with icons
+        items = []
+        
+        # Email with icon
+        if basics.email:
+            items.append(("email.png", basics.email))
+        
+        # Phone with icon
+        if basics.phone:
+            items.append(("phone.png", basics.phone))
+        
+        # Location (no icon)
+        if basics.location:
+            items.append((None, basics.location))
+        
+        # Links with icons
+        for link in basics.links[:2]:
+            clean_link = link.replace("https://", "").replace("http://", "")
+            if "github" in link.lower() and (ASSETS_DIR / "github.png").exists():
+                items.append(("github.png", clean_link))
+            elif "linkedin" in link.lower() and (ASSETS_DIR / "linkedin.png").exists():
+                items.append(("linkedin.png", clean_link))
+            else:
+                items.append((None, clean_link))
+        
+        # Calculate total width
+        total_width = 0
+        for i, (icon_file, text) in enumerate(items):
+            if i > 0:
+                total_width += self.get_string_width(separator)
+            if icon_file and (ASSETS_DIR / icon_file).exists():
+                total_width += icon_size + gap
+            total_width += self.get_string_width(self.sanitize_text(text))
+        
+        # Center the line
+        x = (self.w - total_width) / 2
+        y = self.get_y()
+        
+        for i, (icon_file, text) in enumerate(items):
+            # Separator
+            if i > 0:
+                self.set_xy(x, y)
+                self.cell(0, icon_size, separator)
+                x += self.get_string_width(separator)
+            
+            # Icon
+            if icon_file and (ASSETS_DIR / icon_file).exists():
+                try:
+                    self.image(str(ASSETS_DIR / icon_file), x=x, y=y + 0.5, h=icon_size - 1)
+                except Exception:
+                    pass
+                x += icon_size + gap
+            
+            # Text
+            sanitized = self.sanitize_text(text)
+            text_w = self.get_string_width(sanitized)
+            self.set_xy(x, y)
+            self.cell(text_w, icon_size, sanitized)
+            x += text_w
+        
+        self.ln(icon_size + 2)
     
     def add_summary(self, summary: str):
         """Add professional summary section."""
@@ -883,18 +943,9 @@ class ResumePDF(FPDF):
             self.cell(0, 5, self.sanitize_text(f"{exp.company} | {exp.location}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.ln(1)
             
-            # Bullets
-            self.set_font("Times", "", 10)
-            self.set_text_color(*BLACK)
+            # Bullets with bold keywords
             for bullet in exp.bullets:
-                # Add bullet character
-                x = self.get_x()
-                y = self.get_y()
-                self.set_xy(x + 3, y)
-                self.cell(3, 5, chr(149), new_x=XPos.RIGHT, new_y=YPos.LAST)
-                
-                # Bullet text with proper wrapping
-                self.multi_cell(0, 5, self.sanitize_text(bullet), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                self.write_bullet_with_bold(bullet)
             
             self.ln(2)
     
@@ -943,19 +994,145 @@ class ResumePDF(FPDF):
                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.ln(1)
     
+    def write_bullet_with_bold(self, text: str, line_height: float = 5):
+        """Write a bullet point with bold first words, metrics and ATS keywords."""
+        import re
+        
+        text = self.sanitize_text(text)
+        
+        # Comprehensive patterns for metrics
+        metric_patterns = [
+            r'\d+[%+]',                           # Percentages: 40%, 25+
+            r'\d+\s*(?:ms|milliseconds?)',        # Milliseconds: 200ms
+            r'\d+\s*(?:seconds?|secs?)',          # Seconds: 2 seconds
+            r'\d+\s*(?:minutes?|mins?)',          # Minutes
+            r'\d+\s*(?:hours?|hrs?)',             # Hours
+            r'\d+\s*(?:days?|weeks?|months?)',    # Time periods
+            r'\d+\s*x\b',                         # Multipliers: 3x, 10x
+            r'\$[\d,]+[MKB]?',                    # Money: $500K
+            r'\d+[KMB]\+?\s*(?:users?|requests?|transactions?|daily)?',
+            r'\d+\+?\s*(?:microservices?|services?|APIs?)',
+            r'P\d+\s*(?:latency|response)',       # P99 latency
+            r'\d+\.\d+%',                         # Decimal percentages
+            r'\d+\+\s*(?:clients?|stories|defects|members?)',
+        ]
+        metric_pattern = '(' + '|'.join(metric_patterns) + ')'
+        
+        # ATS keywords to bold
+        ats_keywords = [
+            'Java', 'Python', 'JavaScript', 'TypeScript', 'Go', 'Rust', 'C++', 'C#', 'Scala', 'Kotlin',
+            'React', 'React.js', 'Angular', 'Vue', 'Next.js', 'HTML', 'CSS', 'SASS', 'Redux',
+            'Node.js', 'Express', 'Spring Boot', 'Spring', 'Django', 'FastAPI', 'Flask', 'NestJS',
+            'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Oracle', 'SQL', 'NoSQL',
+            'AWS', 'EC2', 'S3', 'Lambda', 'RDS', 'CloudWatch', 'ECS', 'EKS', 'GCP', 'Azure',
+            'Docker', 'Kubernetes', 'K8s', 'Terraform', 'Ansible', 'Helm',
+            'CI/CD', 'Jenkins', 'GitLab', 'GitHub', 'Git', 'CircleCI', 'ArgoCD',
+            'Kafka', 'RabbitMQ', 'SQS', 'SNS', 'Apache Kafka', 'Apache Flink', 'Apache Spark', 'Apache Airflow',
+            'REST', 'RESTful', 'GraphQL', 'gRPC', 'API', 'APIs', 'OAuth', 'JWT', 'OWASP',
+            'Microservices', 'Serverless', 'Event-driven',
+            'Spark', 'DBT', 'TensorFlow', 'PyTorch', 'ML', 'AI', 'YOLOv10',
+            'Grafana', 'Prometheus', 'Splunk', 'Datadog', 'Postman', 'Fortify',
+            'Agile', 'Scrum', 'Kanban', 'TDD', 'BDD', 'DevOps', 'SRE', 'SOLID',
+            'Architected', 'Engineered', 'Designed', 'Authored', 'Developed', 'Implemented', 'Deployed',
+            'Optimized', 'Reduced', 'Increased', 'Improved', 'Achieved', 'Slashed', 'Accelerated',
+            'Led', 'Managed', 'Directed', 'Spearheaded', 'Championed', 'Pioneered', 'Mentored',
+            'Built', 'Created', 'Automated', 'Migrated', 'Integrated', 'Collaborated', 'Orchestrated',
+            'Resolved', 'Revamped', 'Strengthened', 'Audited', 'Secured', 'Hardened',
+            'Fiserv', 'GitLab', 'SpringBoot', 'Typescript', 'React.js', 'Node.Js',
+            'Git', 'MySQL', 'NoSQL', 'Jira', 'Kubernetes', 'Splunk', 'Postman', 'Grafana', 'Confluence',
+        ]
+        
+        keyword_pattern = r'\b(' + '|'.join(re.escape(k) for k in sorted(ats_keywords, key=len, reverse=True)) + r')\b'
+        
+        # Find all bold segments
+        bold_segments = set()
+        
+        # Bold first 3 words (Action Phrase)
+        first_three_words = re.match(r'^(\W*\w+\W+\w+\W+\w+)', text)
+        if first_three_words:
+            bold_segments.add((first_three_words.start(), first_three_words.end()))
+        
+        for match in re.finditer(metric_pattern, text, re.IGNORECASE):
+            bold_segments.add((match.start(), match.end()))
+        for match in re.finditer(keyword_pattern, text, re.IGNORECASE):
+            bold_segments.add((match.start(), match.end()))
+        
+        # Sort and merge overlapping segments
+        bold_list = sorted(bold_segments, key=lambda x: x[0])
+        merged = []
+        for start, end in bold_list:
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+            else:
+                merged.append((start, end))
+        
+        # Write text with mixed fonts
+        bullet_indent = 6
+        text_width = self.w - self.r_margin - self.l_margin - bullet_indent
+        pos = 0
+        x_start = self.get_x()
+        y = self.get_y()
+        
+        # Bullet character
+        self.set_font("Times", "", 10)
+        self.set_xy(x_start, y)
+        self.cell(3, line_height, chr(149))
+        x_start += bullet_indent
+        
+        first_line = True
+        for start, end in merged:
+            # Normal text before
+            if pos < start:
+                self.set_font("Times", "", 10)
+                normal_text = text[pos:start]
+                # Wrap text
+                while normal_text:
+                    self.set_xy(x_start, y)
+                    self.cell(text_width, line_height, normal_text[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    normal_text = normal_text[100:]
+                    if normal_text:
+                        y = self.get_y()
+                        x_start = self.l_margin + bullet_indent
+                        first_line = False
+            
+            # Bold text
+            self.set_font("Times", "B", 10)
+            bold_text = text[start:end]
+            self.set_xy(x_start, y)
+            self.cell(text_width, line_height, bold_text[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            if len(bold_text) > 100:
+                remaining = bold_text[100:]
+                while remaining:
+                    y = self.get_y()
+                    x_start = self.l_margin + bullet_indent
+                    self.set_xy(x_start, y)
+                    self.cell(text_width, line_height, remaining[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    remaining = remaining[100:]
+            
+            y = self.get_y()
+            x_start = self.l_margin + bullet_indent
+            pos = end
+        
+        # Remaining normal text
+        if pos < len(text):
+            self.set_font("Times", "", 10)
+            remaining_text = text[pos:]
+            while remaining_text:
+                self.set_xy(x_start, y)
+                self.cell(text_width, line_height, remaining_text[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                remaining_text = remaining_text[100:]
+                if remaining_text:
+                    y = self.get_y()
+                    x_start = self.l_margin + bullet_indent
+    
     def add_achievements(self, achievements: list[str]):
         """Add achievements section."""
         self.section_header("Achievements")
         
-        self.set_font("Times", "", 10)
-        self.set_text_color(*BLACK)
-        
         for achievement in achievements:
-            x = self.get_x()
-            y = self.get_y()
-            self.set_xy(x + 3, y)
-            self.cell(3, 5, chr(149), new_x=XPos.RIGHT, new_y=YPos.LAST)
-            self.multi_cell(0, 5, self.sanitize_text(achievement), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.write_bullet_with_bold(achievement)
+        
+        self.ln(2)
 
 
 def generate_resume_pdf(resume_data: ParsedResume) -> bytes:
