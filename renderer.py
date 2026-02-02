@@ -6,7 +6,6 @@ Works with CLI and Streamlit use cases.
 
 import copy
 import os
-import re
 import unicodedata
 from io import BytesIO
 from pathlib import Path
@@ -164,7 +163,7 @@ class ResumePDF(FPDF):
         self.ln(2)
     
     def add_summary(self, summary: str):
-        """Add professional summary section with bold formatting for keywords and metrics."""
+        """Add professional summary section with plain text formatting."""
         if not summary:
             return
             
@@ -348,146 +347,20 @@ class ResumePDF(FPDF):
             self.write(line_height, word_to_write)
 
     def write_bullet_with_bold(self, text: str, line_height: float = 5):
-        """Write a bullet point with bold first words, metrics and ATS keywords."""
+        """Write a bullet point with plain text formatting (no bold)."""
         text = sanitize_unicode_for_pdf(text)
         if not text:
             return
         
-        # Comprehensive patterns for metrics
-        metric_patterns = [
-            r'\d+[%+]',                           # Percentages: 40%, 25+
-            r'\d+\s*(?:ms|milliseconds?)',        # Milliseconds: 200ms, 450 ms
-            r'\d+\s*(?:seconds?|secs?)',          # Seconds: 2 seconds, 5 secs
-            r'\d+\s*(?:minutes?|mins?)',          # Minutes: 45 minutes, 8 mins
-            r'\d+\s*(?:hours?|hrs?)',             # Hours: 2 hours
-            r'\d+\s*(?:days?|weeks?|months?)',    # Time periods: 3 weeks, 2 days
-            r'\d+\s*x\b',                         # Multipliers: 3x, 10x
-            r'\$[\d,]+[MKB]?',                    # Money: $500K, $2M, $150
-            r'\d+[KMB]\+?\s*(?:users?|requests?|transactions?|daily)?',  # Scale: 50K users, 2M+ requests
-            r'\d+\+?\s*(?:microservices?|services?|APIs?)',              # Counts: 15 microservices, 8+ APIs
-            r'P\d+\s*(?:latency|response)',       # P99 latency, P95 response
-            r'\d+\.\d+%',                         # Decimal percentages: 99.97%
-            r'sub-\d+\s*(?:ms|seconds?)',         # Sub-metrics: sub-200ms
-            r'\d+\s*(?:requests?/second|req/s|rps|QPS)',  # Throughput: 10K requests/second
-            r'\d+\+\s*(?:clients?|stories|defects|members?)',  # Counts with +: 15+ clients, 80+ stories
-        ]
-        metric_pattern = '(' + '|'.join(metric_patterns) + ')'
-        
-        # ATS keywords to bold
-        ats_keywords = [
-            # Programming Languages
-            'Java', 'Python', 'JavaScript', 'TypeScript', 'Go', 'Golang', 'Rust', 'C++', 'C#', 'Ruby', 'PHP', 'Scala', 'Kotlin',
-            'XML', 'JSON', 'YAML',
-            # Frontend
-            'React', 'React.js', 'ReactJS', 'Angular', 'Vue', 'Vue.js', 'Next.js', 'HTML', 'CSS', 'SASS', 'Redux', 'Webpack',
-            # Backend
-            'Node.js', 'NodeJS', 'Express', 'Express.js', 'Spring Boot', 'Spring', 'SpringBoot', 'Django', 'FastAPI', 'Flask', 'Rails', 'NestJS',
-            # Databases
-            'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Cassandra', 'Oracle', 'SQL', 'NoSQL', 'SQLite',
-            'Firebase', 'Firestore', 'Database', 'DB',
-            # Cloud & DevOps
-            'AWS', 'EC2', 'S3', 'Lambda', 'RDS', 'CloudWatch', 'ECS', 'EKS', 'VPC', 'ELB', 'ALB', 'Route 53',
-            'GCP', 'Google Cloud', 'Azure', 'Heroku', 'Pivotal Cloud Foundry', 'PCF',
-            'Docker', 'Kubernetes', 'K8s', 'Terraform', 'Ansible', 'Helm', 'Jenkins', 'CI/CD', 'CICD',
-            # Tools & Platforms
-            'GitLab', 'GitHub', 'Git', 'Bitbucket', 'Jira', 'Confluence', 'Maven', 'Gradle', 'npm', 'yarn', 'pip',
-            'CircleCI', 'Travis', 'ArgoCD', 'TeamCity',
-            # Testing
-            'Playwright', 'Selenium', 'Cucumber', 'JUnit', 'Jest', 'Mocha', 'Pytest', 'TestNG', 'Mockito',
-            # Messaging & Streaming
-            'Kafka', 'RabbitMQ', 'SQS', 'SNS', 'Pub/Sub', 'ActiveMQ', 'Apache Kafka', 'Apache Flink', 'Apache Spark', 'Apache Airflow', 'Apache Storm',
-            # API & Security
-            'REST', 'RESTful', 'GraphQL', 'gRPC', 'API', 'APIs', 'OAuth', 'OAuth2', 'JWT', 'OWASP', '3Scale',
-            'Microservices', 'Serverless', 'Event-driven', 'Fortify', 'SSL', 'TLS', 'HTTPS',
-            # Data & ML
-            'Hadoop', 'DBT', 'Spark', 'Presto', 'Hive', 'TensorFlow', 'PyTorch', 'ML', 'AI', 'NLP', 'LLM', 'BERT', 'GPT',
-            'YOLOv10', 'YOLO', 'TensorFlow Lite', 'Deep Learning', 'Machine Learning', 'Neural Network',
-            # Monitoring & Observability
-            'Grafana', 'Prometheus', 'Splunk', 'Datadog', 'New Relic', 'ELK', 'Kibana', 'Postman', 'Fortify', 'SonarQube',
-            # Methodologies & Patterns
-            'Agile', 'Scrum', 'Kanban', 'TDD', 'BDD', 'DevOps', 'SRE', 'SOLID', 'Design Pattern', 'System Design',
-            'Data Structures', 'Algorithms', 'Object-oriented', 'OOP', 'CAP Theorem',
-            # Action Verbs (Strong Impact)
-            'Architected', 'Engineered', 'Designed', 'Authored', 'Developed', 'Implemented', 'Deployed',
-            'Optimized', 'Reduced', 'Increased', 'Improved', 'Achieved', 'Slashed', 'Accelerated', 'Enhanced', 'Elevated',
-            'Led', 'Managed', 'Directed', 'Spearheaded', 'Championed', 'Pioneered', 'Mentored', 'Coordinated',
-            'Built', 'Created', 'Automated', 'Migrated', 'Integrated', 'Collaborated', 'Orchestrated', 'Forged', 'Constructed',
-            'Resolved', 'Revamped', 'Strengthened', 'Audited', 'Secured', 'Hardened', 'Remediated', 'Prevented', 'Identified',
-            'Streamlined', 'Transformed', 'Refactored', 'Debugged', 'Tested', 'Deployed', 'Published',
-            # Company & Location Names
-            'Fiserv', 'Noida', 'Pune', 'Bhopal', 'India',
-            'Vellore Institute of Technology', 'Symbiosis International University',
-            # Education & Certifications
-            'MBA', 'B.Tech', 'Bachelor', 'Master', 'Computer Science', 'Business Analytics', 'Engineering',
-            # Metrics & Measurement Terms
-            'Efficiency', 'Performance', 'Reliability', 'Scalability', 'Throughput', 'Latency', 'Availability',
-            'Coverage', 'Accuracy', 'Precision', 'Recall',
-        ]
-        
-        # Build regex for keywords - case insensitive matching
-        keyword_pattern = r'\b(' + '|'.join(re.escape(k) for k in sorted(ats_keywords, key=len, reverse=True)) + r')\b'
-        
-        # Find all bold segments
-        bold_segments = set()
-        
-        # ALWAYS bold the first 3 words (Action Phrase)
-        first_three_words = re.match(r'^(\W*\w+\W+\w+\W+\w+)', text)
-        if first_three_words:
-            bold_segments.add((first_three_words.start(), first_three_words.end()))
-        
-        # Find metrics
-        for match in re.finditer(metric_pattern, text, re.IGNORECASE):
-            bold_segments.add((match.start(), match.end()))
-        
-        # Find ATS keywords
-        for match in re.finditer(keyword_pattern, text, re.IGNORECASE):
-            bold_segments.add((match.start(), match.end()))
-        
-        # Sort by position and merge overlapping segments
-        bold_list = sorted(bold_segments, key=lambda x: x[0])
-        merged = []
-        for start, end in bold_list:
-            if merged and start <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
-            else:
-                merged.append((start, end))
-        
-        # Render text with bold segments
         bullet_indent = 6
         right_margin = self.w - self.r_margin
         
         # Start bullet
         self.set_font("Times", "", 10)
-        bullet_x = self.get_x()
-        bullet_y = self.get_y()
         self.cell(3, line_height, chr(149), new_x=XPos.RIGHT, new_y=YPos.LAST)
         
-        pos = 0
-        for start, end in merged:
-            # Normal text before bold segment
-            if pos < start:
-                self.set_font("Times", "", 10)
-                normal_text = text[pos:start]
-                # Write the text segment as-is to preserve original spacing
-                self._write_text_segment(normal_text, line_height, bullet_indent, right_margin)
-            
-            # Bold text segment - add space before if needed
-            self.set_font("Times", "B", 10)
-            bold_text = text[start:end]
-            # Add leading space if previous character was a space and we're not at start
-            if start > 0 and text[start - 1] == ' ' and self.get_x() > self.l_margin + bullet_indent:
-                self.write(line_height, ' ')
-            self._write_text_segment(bold_text, line_height, bullet_indent, right_margin)
-            # Add trailing space after bold segment
-            self.write(line_height, ' ')
-            
-            pos = end
-        
-        # Remaining normal text after last bold segment
-        if pos < len(text):
-            self.set_font("Times", "", 10)
-            remaining_text = text[pos:]
-            self._write_text_segment(remaining_text, line_height, bullet_indent, right_margin)
+        # Write text without any bold formatting
+        self._write_text_segment(text, line_height, bullet_indent, right_margin)
         
         # End bullet with line break
         self.ln(line_height)
