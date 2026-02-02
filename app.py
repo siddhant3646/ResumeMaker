@@ -988,8 +988,9 @@ def generate_resume_pdf(resume_data: ParsedResume) -> bytes:
     if resume_data.achievements:
         pdf.add_achievements(resume_data.achievements)
     
-    # Output to bytes
-    return pdf.output()
+    # Output to bytes (convert bytearray to bytes for Streamlit compatibility)
+    output = pdf.output()
+    return bytes(output) if isinstance(output, bytearray) else output
 
 
 # ============================================================================
