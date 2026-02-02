@@ -275,12 +275,14 @@ For ML/AI projects, hiring managers care about ENGINEERING, not just model accur
 ## OUTPUT REQUIREMENTS
 
 ### Professional Summary (3 Sentences)
-1. Years of experience + core tech stack matching JD
+1. **MUST use the EXACT experience duration provided**: "{total_experience}" - core tech stack matching JD
 2. Biggest SPECIFIC achievement (with precise metrics)
 3. Key differentiator (security expertise, mentorship, system design)
 
+**CRITICAL:** Use the exact total experience value provided: "{total_experience}". For example, if provided "3.8 years", write "Software Engineer with 3.8 years of experience" NOT "2+ years".
+
 **EXAMPLE:**
-"Results-driven Software Engineer with 4+ years building scalable distributed systems using Node.js, React.js, and AWS. Reduced P99 API latency by 35% and achieved 99.97% uptime across 15 production microservices. Recognized as Secure Code Warrior Champion (Rank 1/500+) for expertise in OWASP Top 10 vulnerability remediation."
+"Results-driven Software Engineer with 3.8 years building scalable distributed systems using Node.js, React.js, and AWS. Reduced P99 API latency by 35% and achieved 99.97% uptime across 15 production microservices. Recognized as Secure Code Warrior Champion (Rank 1/500+) for expertise in OWASP Top 10 vulnerability remediation."
 
 ### Skills (MUST be an object with two keys)
 Return skills as an OBJECT, not a list:
@@ -395,7 +397,9 @@ def tailor_resume(
 ## Candidate's Total Experience:
 {total_experience}
 
-**IMPORTANT:** Use "{total_experience}" in the Professional Summary instead of generic years.
+**CRITICAL - MANDATORY:** You MUST use "{total_experience}" as the EXACT experience duration in the Professional Summary. Do NOT round down or use generic values like "2+" or "3+" years. Use the exact calculated value provided above.
+
+**Example:** If total experience is "3.8 years", write: "Software Engineer with 3.8 years of experience specializing in..."
 
 ---
 
@@ -417,7 +421,7 @@ Please tailor the resume for this job description. Return ONLY a valid JSON obje
 ## Candidate's Total Experience:
 {total_experience}
 
-**IMPORTANT:** Use "{total_experience}" in the Professional Summary instead of generic years.
+**CRITICAL - MANDATORY:** You MUST use "{total_experience}" as the EXACT experience duration in the Professional Summary first sentence. Do NOT round down or use generic values.
 
 ---
 

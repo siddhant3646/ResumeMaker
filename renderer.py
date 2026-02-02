@@ -4,6 +4,7 @@ Supports both TailoredResume and ParsedResume models.
 Works with CLI and Streamlit use cases.
 """
 
+import copy
 import os
 import re
 import unicodedata
@@ -325,6 +326,27 @@ class ResumePDF(FPDF):
         
         self.ln(2)
     
+    def _write_text_segment(self, text: str, line_height: float, bullet_indent: float, right_margin: float):
+        """Write a text segment with proper word wrapping and spacing preservation."""
+        words = text.split(' ')
+        for i, word in enumerate(words):
+            if not word:
+                continue
+            # Add space before word (except for first word at bullet start)
+            if i > 0 or self.get_x() > self.l_margin + bullet_indent + 3:
+                word_to_write = ' ' + word
+            else:
+                word_to_write = word
+            
+            word_width = self.get_string_width(word_to_write)
+            
+            if self.get_x() + word_width > right_margin - 5:
+                self.ln(line_height)
+                self.set_x(self.l_margin + bullet_indent)
+                word_to_write = word  # No leading space at line start
+            
+            self.write(line_height, word_to_write)
+
     def write_bullet_with_bold(self, text: str, line_height: float = 5):
         """Write a bullet point with bold first words, metrics and ATS keywords."""
         text = sanitize_unicode_for_pdf(text)
@@ -446,30 +468,18 @@ class ResumePDF(FPDF):
             if pos < start:
                 self.set_font("Times", "", 10)
                 normal_text = text[pos:start]
-                words = normal_text.split()
-                for i, word in enumerate(words):
-                    word_to_write = word + (' ' if i < len(words) - 1 else '')
-                    word_width = self.get_string_width(word_to_write)
-                    
-                    if self.get_x() + word_width > right_margin - 5:
-                        self.ln(line_height)
-                        self.set_x(self.l_margin + bullet_indent)
-                    
-                    self.write(line_height, word_to_write)
+                # Write the text segment as-is to preserve original spacing
+                self._write_text_segment(normal_text, line_height, bullet_indent, right_margin)
             
-            # Bold text segment
+            # Bold text segment - add space before if needed
             self.set_font("Times", "B", 10)
             bold_text = text[start:end]
-            words = bold_text.split()
-            for i, word in enumerate(words):
-                word_to_write = word + (' ' if i < len(words) - 1 else '')
-                word_width = self.get_string_width(word_to_write)
-                
-                if self.get_x() + word_width > right_margin - 5:
-                    self.ln(line_height)
-                    self.set_x(self.l_margin + bullet_indent)
-                
-                self.write(line_height, word_to_write)
+            # Add leading space if previous character was a space and we're not at start
+            if start > 0 and text[start - 1] == ' ' and self.get_x() > self.l_margin + bullet_indent:
+                self.write(line_height, ' ')
+            self._write_text_segment(bold_text, line_height, bullet_indent, right_margin)
+            # Add trailing space after bold segment
+            self.write(line_height, ' ')
             
             pos = end
         
@@ -477,16 +487,7 @@ class ResumePDF(FPDF):
         if pos < len(text):
             self.set_font("Times", "", 10)
             remaining_text = text[pos:]
-            words = remaining_text.split()
-            for i, word in enumerate(words):
-                word_to_write = word + (' ' if i < len(words) - 1 else '')
-                word_width = self.get_string_width(word_to_write)
-                
-                if self.get_x() + word_width > right_margin - 5:
-                    self.ln(line_height)
-                    self.set_x(self.l_margin + bullet_indent)
-                
-                self.write(line_height, word_to_write)
+            self._write_text_segment(remaining_text, line_height, bullet_indent, right_margin)
         
         # End bullet with line break
         self.ln(line_height)
@@ -654,20 +655,26 @@ def generate_pdf_to_bytes(resume: Any, include_summary: bool = True) -> bytes:
     return bytes(output) if isinstance(output, bytearray) else output
 
 
-def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None, 
-                                  max_attempts: int = 2) -> str:
+def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None,
+                                  max_attempts: int = 4) -> str:
     """
     Generate PDF with automatic 1-page constraint.
-    If the resume exceeds 1 page, it will retry without the summary section.
+    Progressively removes sections if content exceeds 1 page:
+    1. Full resume with summary
+    2. Without summary (compact mode)
+    3. Without projects (compact mode)
+    4. Without achievements (compact mode)
     
     Args:
         resume: Resume object (TailoredResume or ParsedResume)
         output_dir: Output directory (if None, uses current directory)
-        max_attempts: Maximum number of generation attempts
+        max_attempts: Maximum number of generation attempts (default 4)
     
     Returns:
-        Absolute path to the generated PDF
+        Absolute path to the generated PDF (guaranteed 1 page)
     """
+    import copy
+    
     # Handle both object and dict access for basics.name
     if hasattr(resume, 'basics'):
         basics = resume.basics
@@ -683,24 +690,116 @@ def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None,
     else:
         output_path = filename
     
-    # Try 1: Generate with summary
-    pdf_path = generate_pdf(resume, output_path, include_summary=True, compact_mode=False)
+    # Convert to dict for easy modification
+    if hasattr(resume, 'dict'):
+        resume_dict = resume.dict()
+    elif hasattr(resume, 'model_dump'):
+        resume_dict = resume.model_dump()
+    else:
+        resume_dict = dict(resume)
+    
+    # Store original values
+    original_summary = resume_dict.get('summary', '')
+    original_projects = resume_dict.get('projects', [])
+    original_achievements = resume_dict.get('achievements', [])
+    
+    # Try 1: Generate with everything
+    temp_dict = copy.deepcopy(resume_dict)
+    pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=False)
     page_count = get_pdf_page_count(pdf_path)
     
     if page_count == 1:
         return pdf_path
     
-    # Try 2: Generate without summary, compact mode
-    summary = getattr(resume, 'summary', None) or resume.get('summary', '')
-    if page_count > 1 and max_attempts >= 2 and summary:
-        pdf_path = generate_pdf(resume, output_path, include_summary=False, compact_mode=True)
+    # Try 2: Without summary, compact mode
+    if max_attempts >= 2:
+        temp_dict = copy.deepcopy(resume_dict)
+        temp_dict['summary'] = ''
+        pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=True)
         page_count = get_pdf_page_count(pdf_path)
         
         if page_count == 1:
             return pdf_path
     
-    # Return whatever we have
+    # Try 3: Without projects, compact mode
+    if max_attempts >= 3:
+        temp_dict = copy.deepcopy(resume_dict)
+        temp_dict['summary'] = ''
+        temp_dict['projects'] = []
+        pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=True)
+        page_count = get_pdf_page_count(pdf_path)
+        
+        if page_count == 1:
+            return pdf_path
+    
+    # Try 4: Without achievements, compact mode (keep essential: experience + skills + education)
+    if max_attempts >= 4:
+        temp_dict = copy.deepcopy(resume_dict)
+        temp_dict['summary'] = ''
+        temp_dict['projects'] = []
+        temp_dict['achievements'] = []
+        pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=True)
+        page_count = get_pdf_page_count(pdf_path)
+        
+        if page_count == 1:
+            return pdf_path
+    
+    # Return the last attempt (minimum content version)
     return pdf_path
+
+
+def _generate_pdf_from_dict(resume_dict: dict, output_path: str, compact_mode: bool = False) -> str:
+    """Helper function to generate PDF from a resume dictionary."""
+    pdf = ResumePDF()
+    
+    # Adjust margins for compact mode
+    if compact_mode:
+        pdf.set_margins(10, 5, 10)
+    else:
+        pdf.set_margins(10, 7, 10)
+    
+    pdf.add_page()
+    
+    basics = resume_dict.get('basics', {})
+    
+    # Add header
+    pdf.add_header_info(type('Basics', (), basics) if isinstance(basics, dict) else basics)
+    
+    # Add summary if present
+    summary = resume_dict.get('summary', '')
+    if summary:
+        pdf.add_summary(summary)
+    
+    # Add skills - handle both dict format and list format
+    skills = resume_dict.get('skills')
+    if skills:
+        # Convert list format to dict format if needed
+        if isinstance(skills, list):
+            skills = {'languages_frameworks': skills, 'tools': []}
+        pdf.add_skills(skills)
+    
+    # Add experience
+    experience = resume_dict.get('experience', [])
+    if experience:
+        pdf.add_experience(experience)
+    
+    # Add education
+    education = resume_dict.get('education', [])
+    if education:
+        pdf.add_education(education)
+    
+    # Add projects
+    projects = resume_dict.get('projects', [])
+    if projects:
+        pdf.add_projects(projects)
+    
+    # Add achievements
+    achievements = resume_dict.get('achievements', [])
+    if achievements:
+        pdf.add_achievements(achievements)
+    
+    pdf.output(output_path)
+    return output_path
 
 
 def render_and_save_pdf(resume: Any, output_path: Optional[str] = None, 
