@@ -841,7 +841,6 @@ def main():
         background-color: #f9fafb;
         padding: 1.5rem;
         border-radius: 0.5rem;
-        border: 1px solid #e5e7eb;
         margin-bottom: 1rem;
     }
     .success-box {
@@ -881,22 +880,6 @@ def main():
     
     # Initialize model router
     model_router = ModelRouter()
-    
-    # Sidebar - Model tier info
-    with st.sidebar:
-        st.header("📊 Model Usage")
-        tier_info = model_router.get_current_tier_info()
-        
-        for info in tier_info:
-            tier_emoji = "✅" if info['active'] else "⚠️"
-            limit_display = f"{info['used']}/{info['limit']}" if info['limit'] != '∞' else f"{info['used']}/∞"
-            st.write(f"{tier_emoji} **Tier {info['tier']}**: {limit_display}")
-            if info['limit'] != '∞':
-                st.progress(min(info['percentage'] / 100, 1.0), 
-                           text=f"{info['model'][:25]}...")
-        
-        st.divider()
-        st.info("💡 Models auto-switch when limits are reached. Gemma 3 27B is always available.")
     
     # Step indicator
     st.markdown(f"### Step {st.session_state.step} of 3")
@@ -1011,8 +994,6 @@ def main():
             # Success message
             st.markdown("<div class='success-box'>", unsafe_allow_html=True)
             st.success("✅ Resume tailored successfully!")
-            if hasattr(st.session_state, 'model_used'):
-                st.caption(f"Generated using: {st.session_state.model_used}")
             st.markdown("</div>", unsafe_allow_html=True)
             
             # Preview tailored resume
