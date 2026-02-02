@@ -156,6 +156,34 @@ def calculate_total_experience(experience_list: list) -> str:
         return f"{int(rounded_years)}+ years"
 
 
+def force_experience_in_summary(resume: TailoredResume, correct_experience: str) -> TailoredResume:
+    """
+    Post-process the AI-generated summary to ensure it uses the correct total experience.
+    
+    Args:
+        resume: The TailoredResume object with AI-generated content
+        correct_experience: The correctly calculated experience string (e.g., "4+ years")
+        
+    Returns:
+        TailoredResume with corrected experience value in summary
+    """
+    if not resume.summary:
+        return resume
+    
+    # Pattern to match various YOE formats: "2+ years", "2.5 years", "3 years", "2-3 years", etc.
+    yoe_pattern = r'\b\d+(?:\.\d+)?\+?\s*(?:-\s*\d+\+?)?\s*years?\s+of\s+experience\b'
+    
+    # Replace any YOE pattern with the correct experience
+    resume.summary = re.sub(
+        yoe_pattern,
+        f"{correct_experience} of experience",
+        resume.summary,
+        flags=re.IGNORECASE
+    )
+    
+    return resume
+
+
 # ============================================================================
 # System Prompt
 # ============================================================================
@@ -239,7 +267,12 @@ Sentence 1: "Software Engineer with {total_experience} of experience specializin
 Sentence 2: Domain-specific achievement with quantified metrics matching JD priorities.
 Sentence 3: Differentiator that matches JD values (security, scale, collaboration).
 
-**MANDATORY:** Use "{total_experience}" EXACTLY as shown - do NOT round or change.
+**MANDATORY - THIS IS CRITICAL:**
+- Use "{total_experience}" EXACTLY as provided - do NOT calculate your own value
+- The experience value is ALREADY calculated from all work history dates in the master resume
+- DO NOT say "2+ years" or "3+ years" - use ONLY: "{total_experience}"
+- Example: If "{total_experience}" is "4+ years", you MUST write: "Software Engineer with 4+ years of experience..."
+- NEVER use a different experience duration than what is provided above
 
 ### 4.2 Experience Bullets (MAXIMUM 6 per role)
 **STRICT LIMIT: 6 bullets maximum per role.**
