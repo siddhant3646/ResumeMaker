@@ -1000,21 +1000,13 @@ class ResumePDF(FPDF):
         
         text = self.sanitize_text(text)
         
-        # Comprehensive patterns for metrics
+        # Patterns for metrics
         metric_patterns = [
-            r'\d+[%+]',                           # Percentages: 40%, 25+
-            r'\d+\s*(?:ms|milliseconds?)',        # Milliseconds: 200ms
-            r'\d+\s*(?:seconds?|secs?)',          # Seconds: 2 seconds
-            r'\d+\s*(?:minutes?|mins?)',          # Minutes
-            r'\d+\s*(?:hours?|hrs?)',             # Hours
-            r'\d+\s*(?:days?|weeks?|months?)',    # Time periods
-            r'\d+\s*x\b',                         # Multipliers: 3x, 10x
-            r'\$[\d,]+[MKB]?',                    # Money: $500K
-            r'\d+[KMB]\+?\s*(?:users?|requests?|transactions?|daily)?',
-            r'\d+\+?\s*(?:microservices?|services?|APIs?)',
-            r'P\d+\s*(?:latency|response)',       # P99 latency
-            r'\d+\.\d+%',                         # Decimal percentages
-            r'\d+\+\s*(?:clients?|stories|defects|members?)',
+            r'\d+[%+]', r'\d+\s*(?:ms|milliseconds?)', r'\d+\s*(?:seconds?|secs?)',
+            r'\d+\s*(?:minutes?|mins?)', r'\d+\s*(?:hours?|hrs?)', r'\d+\s*(?:days?|weeks?|months?)',
+            r'\d+\s*x\b', r'\$[\d,]+[MKB]?', r'\d+[KMB]\+?\s*(?:users?|requests?|transactions?|daily)?',
+            r'\d+\+?\s*(?:microservices?|services?|APIs?)', r'P\d+\s*(?:latency|response)',
+            r'\d+\.\d+%', r'\d+\+\s*(?:clients?|stories|defects|members?)',
         ]
         metric_pattern = '(' + '|'.join(metric_patterns) + ')'
         
@@ -1047,7 +1039,7 @@ class ResumePDF(FPDF):
         # Find all bold segments
         bold_segments = set()
         
-        # Bold first 3 words (Action Phrase)
+        # Bold first 3 words
         first_three_words = re.match(r'^(\W*\w+\W+\w+\W+\w+)', text)
         if first_three_words:
             bold_segments.add((first_three_words.start(), first_three_words.end()))
@@ -1057,7 +1049,7 @@ class ResumePDF(FPDF):
         for match in re.finditer(keyword_pattern, text, re.IGNORECASE):
             bold_segments.add((match.start(), match.end()))
         
-        # Sort and merge overlapping segments
+        # Sort and merge
         bold_list = sorted(bold_segments, key=lambda x: x[0])
         merged = []
         for start, end in bold_list:
@@ -1066,64 +1058,47 @@ class ResumePDF(FPDF):
             else:
                 merged.append((start, end))
         
-        # Write text with mixed fonts
-        bullet_indent = 6
-        text_width = self.w - self.r_margin - self.l_margin - bullet_indent
+        # Build segments with font info
+        segments = []
         pos = 0
+        for start, end in merged:
+            if pos < start:
+                segments.append((text[pos:start], False))
+            segments.append((text[start:end], True))
+            pos = end
+        if pos < len(text):
+            segments.append((text[pos:], False))
+        
+        # Print bullet and segments using write() for proper wrapping
+        bullet_indent = 6
         x_start = self.get_x()
         y = self.get_y()
         
-        # Bullet character
+        # Print bullet
         self.set_font("Times", "", 10)
         self.set_xy(x_start, y)
         self.cell(3, line_height, chr(149))
-        x_start += bullet_indent
+        self.set_xy(x_start + bullet_indent, y)
         
-        first_line = True
-        for start, end in merged:
-            # Normal text before
-            if pos < start:
-                self.set_font("Times", "", 10)
-                normal_text = text[pos:start]
-                # Wrap text
-                while normal_text:
-                    self.set_xy(x_start, y)
-                    self.cell(text_width, line_height, normal_text[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                    normal_text = normal_text[100:]
-                    if normal_text:
-                        y = self.get_y()
-                        x_start = self.l_margin + bullet_indent
-                        first_line = False
-            
-            # Bold text
-            self.set_font("Times", "B", 10)
-            bold_text = text[start:end]
-            self.set_xy(x_start, y)
-            self.cell(text_width, line_height, bold_text[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            if len(bold_text) > 100:
-                remaining = bold_text[100:]
-                while remaining:
-                    y = self.get_y()
-                    x_start = self.l_margin + bullet_indent
-                    self.set_xy(x_start, y)
-                    self.cell(text_width, line_height, remaining[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                    remaining = remaining[100:]
-            
-            y = self.get_y()
-            x_start = self.l_margin + bullet_indent
-            pos = end
-        
-        # Remaining normal text
-        if pos < len(text):
-            self.set_font("Times", "", 10)
-            remaining_text = text[pos:]
-            while remaining_text:
-                self.set_xy(x_start, y)
-                self.cell(text_width, line_height, remaining_text[:100], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                remaining_text = remaining_text[100:]
-                if remaining_text:
-                    y = self.get_y()
-                    x_start = self.l_margin + bullet_indent
+        # Print segments
+        for segment_text, is_bold in segments:
+            words = segment_text.split(' ')
+            for word in words:
+                if not word:
+                    continue
+                
+                # Set font
+                self.set_font("Times", "B" if is_bold else "", 10)
+                
+                # Check if word fits on current line
+                word_width = self.get_string_width(word + ' ')
+                if self.get_x() + word_width > self.w - self.r_margin:
+                    # New line
+                    self.ln(line_height)
+                    self.set_x(self.l_margin + bullet_indent)
+                
+                # Write word
+                self.write(line_height, word + ' ')
     
     def add_achievements(self, achievements: list[str]):
         """Add achievements section."""
