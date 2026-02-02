@@ -774,12 +774,43 @@ class ResumePDF(FPDF):
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
+    
+    def sanitize_text(self, text: str) -> str:
+        """
+        Sanitize text for PDF output by replacing unsupported Unicode characters.
+        
+        Args:
+            text: Input text that may contain Unicode characters
+            
+        Returns:
+            Sanitized text with ASCII-compatible characters
+        """
+        if not text:
+            return ""
+        
+        # Replace smart quotes and other common Unicode characters
+        replacements = {
+            '"': '"',  # Left double quote
+            '"': '"',  # Right double quote
+            ''': "'",   # Left single quote
+            ''': "'",   # Right single quote
+            '—': '-',   # Em dash
+            '–': '-',   # En dash
+            '…': '...', # Ellipsis
+            '•': '*',   # Bullet (will use ASCII alternative)
+        }
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        # Remove any other non-ASCII characters
+        return text.encode('ascii', 'ignore').decode('ascii')
         
     def section_header(self, title: str):
         """Draw a section header with underline."""
         self.set_font("Times", "B", 11)
         self.set_text_color(*BLACK)
-        self.multi_cell(0, 6, title.upper(), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.multi_cell(0, 6, self.sanitize_text(title.upper()), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.set_draw_color(*BLACK)
         self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
         self.set_text_color(*BLACK)
@@ -790,7 +821,7 @@ class ResumePDF(FPDF):
         # Name - centered and bold
         self.set_font("Times", "B", 14)
         self.set_text_color(*BLACK)
-        self.cell(0, 8, basics.name, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.cell(0, 8, self.sanitize_text(basics.name), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
         # Contact info - centered on one line
         self.set_font("Times", "", 9)
@@ -799,7 +830,7 @@ class ResumePDF(FPDF):
             contact_parts.extend(basics.links[:2])  # Limit to first 2 links
         
         contact_line = " | ".join(filter(None, contact_parts))
-        self.cell(0, 5, contact_line, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.cell(0, 5, self.sanitize_text(contact_line), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(2)
     
     def add_summary(self, summary: str):
@@ -807,7 +838,7 @@ class ResumePDF(FPDF):
         self.section_header("Professional Summary")
         self.set_font("Times", "", 10)
         self.set_text_color(*BLACK)
-        self.multi_cell(0, 5, summary, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.multi_cell(0, 5, self.sanitize_text(summary), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(2)
     
     def add_skills(self, skills: Skills):
@@ -820,14 +851,14 @@ class ResumePDF(FPDF):
             self.set_font("Times", "B", 10)
             self.cell(0, 5, "Languages & Frameworks: ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.set_font("Times", "", 10)
-            self.multi_cell(0, 5, ", ".join(skills.languages_frameworks), 
+            self.multi_cell(0, 5, self.sanitize_text(", ".join(skills.languages_frameworks)),
                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
         if skills.tools:
             self.set_font("Times", "B", 10)
             self.cell(0, 5, "Tools & Platforms: ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.set_font("Times", "", 10)
-            self.multi_cell(0, 5, ", ".join(skills.tools), 
+            self.multi_cell(0, 5, self.sanitize_text(", ".join(skills.tools)),
                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
         self.ln(2)
@@ -840,16 +871,16 @@ class ResumePDF(FPDF):
             # Company and Role
             self.set_font("Times", "B", 10)
             self.set_text_color(*BLACK)
-            self.cell(0, 5, f"{exp.role}", new_x=XPos.RIGHT, new_y=YPos.LAST)
+            self.cell(0, 5, self.sanitize_text(exp.role), new_x=XPos.RIGHT, new_y=YPos.LAST)
             
             # Date on the right
             date_str = f"{exp.startDate} - {exp.endDate}"
-            self.cell(0, 5, date_str, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.cell(0, 5, self.sanitize_text(date_str), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             # Company and Location
             self.set_font("Times", "I", 10)
             self.set_text_color(*GRAY)
-            self.cell(0, 5, f"{exp.company} | {exp.location}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.cell(0, 5, self.sanitize_text(f"{exp.company} | {exp.location}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.ln(1)
             
             # Bullets
@@ -863,7 +894,7 @@ class ResumePDF(FPDF):
                 self.cell(3, 5, chr(149), new_x=XPos.RIGHT, new_y=YPos.LAST)
                 
                 # Bullet text with proper wrapping
-                self.multi_cell(0, 5, bullet, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                self.multi_cell(0, 5, self.sanitize_text(bullet), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             self.ln(2)
     
@@ -875,17 +906,17 @@ class ResumePDF(FPDF):
             # Degree and Field
             self.set_font("Times", "B", 10)
             self.set_text_color(*BLACK)
-            self.cell(0, 5, f"{edu.studyType} in {edu.area}", 
+            self.cell(0, 5, self.sanitize_text(f"{edu.studyType} in {edu.area}"),
                      new_x=XPos.RIGHT, new_y=YPos.LAST)
             
             # Date on right
             date_str = f"{edu.startDate} - {edu.endDate}"
-            self.cell(0, 5, date_str, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.cell(0, 5, self.sanitize_text(date_str), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             # Institution and Location
             self.set_font("Times", "I", 10)
             self.set_text_color(*GRAY)
-            self.cell(0, 5, f"{edu.institution} | {edu.location}", 
+            self.cell(0, 5, self.sanitize_text(f"{edu.institution} | {edu.location}"),
                      new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.ln(1)
     
@@ -897,18 +928,18 @@ class ResumePDF(FPDF):
             # Project name
             self.set_font("Times", "B", 10)
             self.set_text_color(*BLACK)
-            self.cell(0, 5, proj.name, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.cell(0, 5, self.sanitize_text(proj.name), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             # Tech stack
             self.set_font("Times", "I", 9)
             self.set_text_color(*GRAY)
-            self.cell(0, 4, f"Tech Stack: {proj.techStack}", 
+            self.cell(0, 4, self.sanitize_text(f"Tech Stack: {proj.techStack}"),
                      new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             # Description
             self.set_font("Times", "", 10)
             self.set_text_color(*BLACK)
-            self.multi_cell(0, 5, proj.description, 
+            self.multi_cell(0, 5, self.sanitize_text(proj.description),
                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.ln(1)
     
@@ -924,7 +955,7 @@ class ResumePDF(FPDF):
             y = self.get_y()
             self.set_xy(x + 3, y)
             self.cell(3, 5, chr(149), new_x=XPos.RIGHT, new_y=YPos.LAST)
-            self.multi_cell(0, 5, achievement, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.multi_cell(0, 5, self.sanitize_text(achievement), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
 
 def generate_resume_pdf(resume_data: ParsedResume) -> bytes:
