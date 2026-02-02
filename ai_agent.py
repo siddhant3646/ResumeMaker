@@ -6,6 +6,8 @@ Includes Pydantic models for structured output.
 """
 
 import json
+import re
+from datetime import datetime
 from typing import List, Optional
 
 from google import genai
@@ -68,6 +70,92 @@ class TailoredResume(BaseModel):
     skills: Skills = Field(default_factory=Skills)
     projects: List[Project] = Field(default_factory=list)
     achievements: List[str] = Field(default_factory=list)
+
+
+# ============================================================================
+# Tenure Calculation Function
+# ============================================================================
+
+def calculate_total_experience(experience_list: list) -> str:
+    """
+    Calculate total years of experience from a list of experience entries.
+    
+    Args:
+        experience_list: List of experience dicts with startDate and endDate keys
+        
+    Returns:
+        String like "4+ years" or "2.5 years" representing total experience
+    """
+    total_months = 0
+    
+    # Month mapping for parsing dates
+    month_map = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12
+    }
+    
+    def parse_date(date_str: str) -> datetime:
+        """Parse date strings like 'Jun 2022' or 'May2022' into datetime."""
+        date_str = date_str.strip().lower()
+        
+        # Handle "present" or current
+        if date_str in ['present', 'current', 'now', 'today']:
+            return datetime.now()
+        
+        # Try different patterns
+        patterns = [
+            r'([a-z]+)[\s/-]*(\d{4})',  # "Jun 2022" or "Jun2022" or "Jun-2022"
+            r'(\d{1,2})[\s/-]*(\d{4})',  # "6/2022" or "06 2022"
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, date_str)
+            if match:
+                month_part, year_part = match.groups()
+                year = int(year_part)
+                
+                # Try to parse month
+                if month_part.isdigit():
+                    month = int(month_part)
+                else:
+                    # Try to find month from name
+                    month_abbr = month_part[:3]
+                    month = month_map.get(month_abbr, 1)
+                
+                return datetime(year, month, 15)  # Use 15th as middle of month
+        
+        # Fallback: try to extract just year
+        year_match = re.search(r'\d{4}', date_str)
+        if year_match:
+            year = int(year_match.group())
+            return datetime(year, 6, 15)  # Use mid-year
+        
+        return datetime.now()
+    
+    for exp in experience_list:
+        start_date = parse_date(exp.get('startDate', ''))
+        end_date = parse_date(exp.get('endDate', 'Present'))
+        
+        # Calculate months difference
+        months = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+        if months > 0:
+            total_months += months
+    
+    # Convert to years
+    years = total_months / 12
+    
+    # Format output
+    if years < 1:
+        return f"{int(total_months)} months"
+    elif years < 2:
+        return f"{years:.1f} years"
+    else:
+        # Round to nearest half year for cleaner display
+        rounded_years = round(years * 2) / 2
+        if rounded_years == int(rounded_years):
+            return f"{int(rounded_years)}+ years"
+        else:
+            return f"{rounded_years} years"
 
 
 # ============================================================================
@@ -287,6 +375,10 @@ def tailor_resume(
     # Initialize the client
     client = genai.Client(api_key=api_key)
     
+    # Calculate total experience from master resume
+    experience_list = master_resume.get('experience', [])
+    total_experience = calculate_total_experience(experience_list)
+    
     # Check if model supports system instructions (Gemini does, Gemma doesn't)
     supports_system_instruction = 'gemini' in model.lower()
     
@@ -299,6 +391,11 @@ def tailor_resume(
 
 ## Job Description:
 {job_description}
+
+## Candidate's Total Experience:
+{total_experience}
+
+**IMPORTANT:** Use "{total_experience}" in the Professional Summary instead of generic years.
 
 ---
 
@@ -316,6 +413,11 @@ Please tailor the resume for this job description. Return ONLY a valid JSON obje
 
 ## Job Description:
 {job_description}
+
+## Candidate's Total Experience:
+{total_experience}
+
+**IMPORTANT:** Use "{total_experience}" in the Professional Summary instead of generic years.
 
 ---
 

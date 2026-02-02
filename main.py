@@ -260,21 +260,30 @@ def apply(
         rprint("  • Network issues")
         raise typer.Exit(code=1)
     
-    # Generate output filename
-    date_str = datetime.now().strftime("%Y%m%d")
-    safe_company = sanitize_filename(final_company)
-    base_filename = f"Tailored_Resume_{safe_company}_{date_str}"
+    # Generate filename using new format: FirstNameLastNameResumeYear.pdf
+    from renderer import generate_filename
+    filename = generate_filename(tailored_resume.basics.name)
     
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate PDF
-    pdf_path = output_dir / f"{base_filename}.pdf"
+    # Generate PDF with page check
+    pdf_path = output_dir / filename
     rprint(f"\n[cyan]Generating PDF...[/cyan]")
+    rprint(f"[dim]Target filename: {filename}[/dim]")
     
     try:
-        final_pdf_path = render_and_save_pdf(tailored_resume, str(pdf_path))
-        rprint(f"[green]✓[/green] PDF saved: [bold]{final_pdf_path}[/bold]")
+        # Use the new function that ensures 1-page output
+        final_pdf_path = render_and_save_pdf(tailored_resume, str(pdf_path), ensure_single_page=True)
+        
+        # Check final page count
+        from renderer import get_pdf_page_count
+        final_pages = get_pdf_page_count(final_pdf_path)
+        
+        if final_pages == 1:
+            rprint(f"[green]✓[/green] PDF saved: [bold]{final_pdf_path}[/bold] (1 page)")
+        else:
+            rprint(f"[yellow]⚠[/yellow] PDF saved: [bold]{final_pdf_path}[/bold] ({final_pages} pages - best effort)")
     except Exception as e:
         rprint(f"\n[bold red]Error generating PDF:[/bold red] {e}")
         rprint("\n[yellow]If you see font errors, ensure the Times font is available.[/yellow]")
@@ -282,7 +291,8 @@ def apply(
     
     # Optionally save HTML
     if save_html:
-        html_path = output_dir / f"{base_filename}.html"
+        html_filename = filename.replace('.pdf', '.html')
+        html_path = output_dir / html_filename
         final_html_path = preview_html(tailored_resume, str(html_path))
         rprint(f"[green]✓[/green] HTML saved: [bold]{final_html_path}[/bold]")
     
@@ -291,7 +301,8 @@ def apply(
     rprint(Panel.fit(
         f"[bold green]✓ Resume tailored successfully![/bold green]\n\n"
         f"[cyan]Company:[/cyan] {final_company}\n"
-        f"[cyan]Output:[/cyan] {pdf_path.name}",
+        f"[cyan]Filename:[/cyan] {filename}\n"
+        f"[cyan]Pages:[/cyan] {final_pages if 'final_pages' in locals() else '1'}",
         title="Complete",
         border_style="green"
     ))

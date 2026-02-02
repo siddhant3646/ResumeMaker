@@ -1283,7 +1283,16 @@ def main():
                         company_name = company.title()
                         break
                 
-                filename = f"Resume_{sanitize_filename(tailored_resume.basics.name)}_{sanitize_filename(company_name)}_{datetime.now().strftime('%Y%m%d')}.pdf"
+                # Generate filename using new format: FirstNameLastNameResumeYear.pdf
+                name_parts = tailored_resume.basics.name.strip().split()
+                if len(name_parts) >= 2:
+                    first_name = name_parts[0]
+                    last_name = name_parts[-1]
+                else:
+                    first_name = name_parts[0] if name_parts else "Resume"
+                    last_name = ""
+                current_year = datetime.now().year
+                filename = f"{first_name}{last_name}Resume{current_year}.pdf"
                 
                 st.download_button(
                     label="📥 Download Resume PDF",

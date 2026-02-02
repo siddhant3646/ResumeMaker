@@ -4,10 +4,12 @@ Uses multi_cell with proper cursor positioning.
 """
 
 import os
+import re
 import unicodedata
 from pathlib import Path
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+from pypdf import PdfReader
 
 
 PURPLE = (75, 0, 130)  # Keep for reference but using black
@@ -96,7 +98,7 @@ class ResumePDF(FPDF):
         self.set_text_color(*BLACK)
         self.ln(1)
     
-    def icon_text_line(self, items: list, icon_size: float = 4):
+    def icon_text_line(self, items: list, icon_size: float = 3.5):
         """Render a centered line with icon+text pairs.
         items: list of tuples [(icon_filename or None, text), ...]
         """
@@ -133,7 +135,11 @@ class ResumePDF(FPDF):
             
             # Icon
             if icon_file and (ASSETS_DIR / icon_file).exists():
-                self.image(str(ASSETS_DIR / icon_file), x=x, y=y, h=icon_size)
+                try:
+                    self.image(str(ASSETS_DIR / icon_file), x=x, y=y + 0.5, h=icon_size - 1)
+                except Exception:
+                    # If icon fails to render, skip it
+                    pass
                 x += icon_size + gap
             
             # Text
@@ -146,8 +152,6 @@ class ResumePDF(FPDF):
     
     def write_bullet_with_bold(self, text: str, line_height: float = 5):
         """Write a bullet point with bold first words, metrics and ATS keywords."""
-        import re
-        
         # Sanitize text to remove Unicode characters that FPDF doesn't support
         text = sanitize_unicode_for_pdf(text)
         
@@ -167,6 +171,7 @@ class ResumePDF(FPDF):
             r'\d+\.\d+%',                         # Decimal percentages: 99.97%
             r'sub-\d+\s*(?:ms|seconds?)',         # Sub-metrics: sub-200ms
             r'\d+\s*(?:requests?/second|req/s|rps|QPS)',  # Throughput: 10K requests/second
+            r'\d+\+\s*(?:clients?|stories|defects|members?)',  # Counts with +: 15+ clients, 80+ stories
         ]
         metric_pattern = '(' + '|'.join(metric_patterns) + ')'
         
@@ -187,13 +192,12 @@ class ResumePDF(FPDF):
             'CI/CD', 'Jenkins', 'GitLab', 'GitHub', 'Git', 'CircleCI', 'Travis', 'ArgoCD',
             'Playwright', 'Selenium', 'Cucumber', 'JUnit', 'Jest', 'Mocha', 'Pytest',
             # Messaging & Streaming
-            'Kafka', 'RabbitMQ', 'SQS', 'SNS', 'Pub/Sub', 'ActiveMQ',
+            'Kafka', 'RabbitMQ', 'SQS', 'SNS', 'Pub/Sub', 'ActiveMQ', 'Apache Kafka', 'Apache Flink', 'Apache Spark', 'Apache Airflow', 'Apache Storm',
             # API & Security
             'REST', 'RESTful', 'GraphQL', 'gRPC', 'API', 'APIs', 'OAuth', 'OAuth2', 'JWT', 'OWASP', '3Scale',
             'Microservices', 'Serverless', 'Event-driven',
             # Data & ML
-            'Apache Spark', 'Apache Flink', 'Apache Airflow', 'Hadoop', 'DBT', 'Spark', 'Presto', 'Hive',
-            'TensorFlow', 'PyTorch', 'ML', 'AI', 'NLP', 'LLM', 'BERT', 'GPT', 'YOLOv10', 'TensorFlow Lite',
+            'Hadoop', 'DBT', 'Spark', 'Presto', 'Hive', 'TensorFlow', 'PyTorch', 'ML', 'AI', 'NLP', 'LLM', 'BERT', 'GPT', 'YOLOv10', 'TensorFlow Lite',
             # Monitoring & Observability
             'Grafana', 'Prometheus', 'Splunk', 'Datadog', 'New Relic', 'ELK', 'Kibana', 'Postman', 'Fortify',
             # Methodologies
@@ -204,10 +208,13 @@ class ResumePDF(FPDF):
             'Led', 'Managed', 'Directed', 'Spearheaded', 'Championed', 'Pioneered', 'Mentored',
             'Built', 'Created', 'Automated', 'Migrated', 'Integrated', 'Collaborated', 'Orchestrated',
             'Resolved', 'Revamped', 'Strengthened', 'Audited', 'Secured', 'Hardened', 'Remediated',
+            'Secured', 'Engineered', 'Led', 'Migrated', 'Accelerated', 'Revamped', 'Architected', 'Achieved',
+            # Additional terms
+            'Fiserv', 'Noida', 'Fiservs', 'GitLab', 'SpringBoot', 'Typescript', 'React.js', 'Node.Js',
         ]
         
-        # Build regex for keywords
-        keyword_pattern = r'\b(' + '|'.join(re.escape(k) for k in ats_keywords) + r')\b'
+        # Build regex for keywords - case insensitive matching but preserve original case in output
+        keyword_pattern = r'\b(' + '|'.join(re.escape(k) for k in sorted(ats_keywords, key=len, reverse=True)) + r')\b'
         
         # Find all bold segments
         bold_segments = set()
@@ -215,47 +222,128 @@ class ResumePDF(FPDF):
         # ALWAYS bold the first 3 words (Action Phrase)
         first_three_words = re.match(r'^(\W*\w+\W+\w+\W+\w+)', text)
         if first_three_words:
-            bold_segments.add((first_three_words.start(), first_three_words.end(), first_three_words.group(0)))
+            bold_segments.add((first_three_words.start(), first_three_words.end()))
         
         for match in re.finditer(metric_pattern, text, re.IGNORECASE):
-            bold_segments.add((match.start(), match.end(), match.group()))
-        for match in re.finditer(keyword_pattern, text):
-            bold_segments.add((match.start(), match.end(), match.group()))
+            bold_segments.add((match.start(), match.end()))
+        for match in re.finditer(keyword_pattern, text, re.IGNORECASE):
+            bold_segments.add((match.start(), match.end()))
         
         # Sort by position
         bold_list = sorted(bold_segments, key=lambda x: x[0])
         
         # Merge overlapping segments
         merged = []
-        for start, end, txt in bold_list:
+        for start, end in bold_list:
             if merged and start <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(end, merged[-1][1]), text[merged[-1][0]:max(end, merged[-1][1])])
+                merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
             else:
-                merged.append((start, end, txt))
+                merged.append((start, end))
         
-        # Write text with mixed fonts - no extra gap
+        # Write text with mixed fonts using cell() for better compatibility
         pos = 0
-        for start, end, _ in merged:
+        x_start = self.get_x()
+        y = self.get_y()
+        page_width = self.w - self.r_margin
+        
+        for start, end in merged:
             # Normal text before
             if pos < start:
                 self.set_font("Times", "", 10)
                 normal_text = text[pos:start]
-                self.write(line_height, normal_text)
+                # Check if we need to wrap
+                text_width = self.get_string_width(normal_text)
+                if x_start + text_width > page_width:
+                    # Print what fits
+                    self.set_xy(x_start, y)
+                    self.cell(0, line_height, normal_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    x_start = self.l_margin
+                    y = self.get_y()
+                else:
+                    self.set_xy(x_start, y)
+                    self.cell(text_width, line_height, normal_text)
+                    x_start += text_width
+            
             # Bold text
+            bold_text = text[start:end]
             self.set_font("Times", "B", 10)
-            self.write(line_height, text[start:end])
+            text_width = self.get_string_width(bold_text)
+            if x_start + text_width > page_width:
+                self.set_xy(x_start, y)
+                self.cell(0, line_height, bold_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                x_start = self.l_margin
+                y = self.get_y()
+            else:
+                self.set_xy(x_start, y)
+                self.cell(text_width, line_height, bold_text)
+                x_start += text_width
+            
             pos = end
+        
         # Remaining normal text
         if pos < len(text):
             self.set_font("Times", "", 10)
-            self.write(line_height, text[pos:])
-        
-        self.ln(line_height)
+            remaining_text = text[pos:]
+            text_width = self.get_string_width(remaining_text)
+            if x_start + text_width > page_width:
+                self.set_xy(x_start, y)
+                self.cell(0, line_height, remaining_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            else:
+                self.set_xy(x_start, y)
+                self.cell(text_width, line_height, remaining_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        else:
+            self.ln(line_height)
 
 
-def generate_pdf(resume, output_path: str) -> str:
+def get_pdf_page_count(pdf_path: str) -> int:
+    """Get the number of pages in a PDF file."""
+    try:
+        reader = PdfReader(pdf_path)
+        return len(reader.pages)
+    except Exception:
+        return 1
+
+
+def generate_filename(basics_name: str) -> str:
+    """Generate filename in format: FirstNameLastNameResumeYear.pdf"""
+    from datetime import datetime
+    name_parts = basics_name.strip().split()
+    if len(name_parts) >= 2:
+        first_name = name_parts[0]
+        last_name = name_parts[-1]
+    else:
+        first_name = name_parts[0] if name_parts else "Resume"
+        last_name = ""
+    
+    current_year = datetime.now().year
+    return f"{first_name}{last_name}Resume{current_year}.pdf"
+
+
+def generate_pdf(resume, output_path: str = None, include_summary: bool = True, compact_mode: bool = False) -> str:
+    """
+    Generate PDF resume with optional summary and compact mode.
+    
+    Args:
+        resume: TailoredResume object
+        output_path: Output file path (if None, uses generated filename)
+        include_summary: Whether to include the professional summary section
+        compact_mode: Whether to use more compact spacing to fit on 1 page
+    
+    Returns:
+        Absolute path to the generated PDF
+    """
+    # Generate filename if not provided
+    if output_path is None:
+        output_path = generate_filename(resume.basics.name)
+    
     pdf = ResumePDF()
-    pdf.set_margins(10, 7, 10)  # Minimal margins (left, top, right)
+    
+    # Adjust margins for compact mode
+    if compact_mode:
+        pdf.set_margins(10, 5, 10)  # Even smaller top margin
+    else:
+        pdf.set_margins(10, 7, 10)  # Standard minimal margins
+    
     pdf.add_page()
 
     # === NAME ===
@@ -286,7 +374,21 @@ def generate_pdf(resume, output_path: str) -> str:
                 link_items.append((None, clean_link))
         pdf.icon_text_line(link_items)
 
-    pdf.ln(2)
+    if compact_mode:
+        pdf.ln(1)
+    else:
+        pdf.ln(2)
+
+    # === PROFESSIONAL SUMMARY (Optional) ===
+    if include_summary and resume.summary:
+        pdf.section_header("Professional Summary")
+        pdf.set_font("Times", "", 10)
+        summary_text = sanitize_unicode_for_pdf(resume.summary)
+        pdf.multi_cell(0, 5, summary_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        if compact_mode:
+            pdf.ln(1)
+        else:
+            pdf.ln(2)
 
     # === SKILLS ===
     if resume.skills:
@@ -334,6 +436,7 @@ def generate_pdf(resume, output_path: str) -> str:
             pdf.multi_cell(0, 5, role_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
             # Bullets with bold keywords
+            line_height = 4.5 if compact_mode else 5
             for bullet in exp.bullets:
                 bullet_text = bullet[:500] if len(bullet) > 500 else bullet
                 # Ensure bullet ends with a period
@@ -341,8 +444,8 @@ def generate_pdf(resume, output_path: str) -> str:
                 if bullet_text and not bullet_text.endswith(('.', '!', '?')):
                     bullet_text += '.'
                 pdf.set_font("Times", "", 10)
-                pdf.cell(3, 5, "-")  # Bullet point - reduced width
-                pdf.write_bullet_with_bold(bullet_text)
+                pdf.cell(3, line_height, "-")  # Bullet point - reduced width
+                pdf.write_bullet_with_bold(bullet_text, line_height)
 
             pdf.ln(1)
 
@@ -409,8 +512,64 @@ def generate_pdf(resume, output_path: str) -> str:
     return os.path.abspath(output_path)
 
 
-def render_and_save_pdf(resume, output_path: str) -> str:
-    return generate_pdf(resume, output_path)
+def generate_pdf_with_page_check(resume, output_dir: str = None, max_attempts: int = 2) -> str:
+    """
+    Generate PDF with automatic 1-page constraint.
+    If the resume exceeds 1 page, it will retry without the summary section.
+    
+    Args:
+        resume: TailoredResume object
+        output_dir: Output directory (if None, uses current directory)
+        max_attempts: Maximum number of generation attempts
+    
+    Returns:
+        Absolute path to the generated PDF (guaranteed to be 1 page or best effort)
+    """
+    import tempfile
+    
+    # Generate filename
+    filename = generate_filename(resume.basics.name)
+    if output_dir:
+        output_path = os.path.join(output_dir, filename)
+    else:
+        output_path = filename
+    
+    # Try 1: Generate with summary
+    pdf_path = generate_pdf(resume, output_path, include_summary=True, compact_mode=False)
+    page_count = get_pdf_page_count(pdf_path)
+    
+    if page_count == 1:
+        return pdf_path
+    
+    # Try 2: Generate without summary, compact mode
+    if page_count > 1 and max_attempts >= 2 and resume.summary:
+        pdf_path = generate_pdf(resume, output_path, include_summary=False, compact_mode=True)
+        page_count = get_pdf_page_count(pdf_path)
+        
+        if page_count == 1:
+            return pdf_path
+    
+    # Return whatever we have (even if 2 pages, it's the best we could do)
+    return pdf_path
+
+
+def render_and_save_pdf(resume, output_path: str = None, ensure_single_page: bool = True) -> str:
+    """
+    Render and save PDF with optional single-page guarantee.
+    
+    Args:
+        resume: TailoredResume object
+        output_path: Output file path (if None, uses generated filename)
+        ensure_single_page: If True, will remove summary to fit on 1 page
+    
+    Returns:
+        Absolute path to the generated PDF
+    """
+    if ensure_single_page:
+        output_dir = os.path.dirname(output_path) if output_path else None
+        return generate_pdf_with_page_check(resume, output_dir)
+    else:
+        return generate_pdf(resume, output_path, include_summary=True, compact_mode=False)
 
 
 def preview_html(resume, output_path: str) -> str:
