@@ -1,0 +1,30 @@
+
+With our three powerhouse brands—MakeMyTrip, Goibibo, and Redbus—we are proud pioneers of online travel in India. We empower millions of travelers with easy and instant travel solutions, offering a wide range of services, including flights, hotels, homestays, holiday packages, cabs, buses, and trains. Our recent expansions include successful corporate travel solutions, a travel suite for agents, and our entry into the Gulf market with tailored flight and hotel offerings. Launched in 2005 as India’s first online travel portal, MakeMyTrip revolutionized travel planning with user-friendly platforms and value-driven pricing. This innovation led to our NASDAQ listing in 2010, making us the first Indian travel company to achieve this milestone. Our commitment to excellence extends to our people, earning us recognition as one of India’s ‘Top 10 Best Companies to Work For’ for four consecutive years (2010-2013). In 2016, we were named the Best E-commerce Company by the Great Place to Work Institute.
+Roles and Responsibilities: 
+
+Involvement in the full software development life cycle within broadly defined parameters and providing software solutions while keeping into consideration the software quality needs
+Design and define the interaction between the different component pieces
+Write efficient code based on the brief given by the team lead.
+Fast prototyping of proof-of-concept features/applications based on brief.
+Develop and maintain new features on the Java/Golang stack
+Management and execution against project plans and delivery commitments
+Work closely with peers and Leads to develop the best technical design and approach for new product development
+Build software solutions for complex problems.
+Compliance with build/release and configuration management process
+Responsible for developing unit test cases for his/her project module.
+Desired Profile:
+
+Good understanding of Object Oriented Programming Concepts, hands-on knowledge of Java or Golang
+Development across multiple browsers/platforms on the Website
+Good Understanding of SQL/NoSQL data stores
+Fair Understanding of Responsive High-Level Designs
+Work experience in a product/start-up company is a plus
+Familiarity with MVC, SOA, restful web services
+Work with other teams and manage time across multiple projects and tasks in a deadline-driven, team environment
+Understand agile methodology and instill best practices into the process.
+
+
+Educational Qualifications:
+
+3-6 years of experience in software development
+B.E. / B.Tech. / M.E. / M.Tech. / M.S. in Computer Science, Electronics, or a related field from a premier institute.
