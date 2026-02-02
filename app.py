@@ -838,7 +838,6 @@ def main():
         margin-bottom: 2rem;
     }
     .step-container {
-        background-color: #f9fafb;
         padding: 1.5rem;
         border-radius: 0.5rem;
         margin-bottom: 1rem;
