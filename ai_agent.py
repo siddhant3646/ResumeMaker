@@ -274,15 +274,45 @@ For ML/AI projects, hiring managers care about ENGINEERING, not just model accur
 
 ## OUTPUT REQUIREMENTS
 
-### Professional Summary (3 Sentences)
-1. **MUST use the EXACT experience duration provided**: "{total_experience}" - core tech stack matching JD
-2. Biggest SPECIFIC achievement (with precise metrics)
-3. Key differentiator (security expertise, mentorship, system design)
+### Professional Summary (3 Sentences - MUST BE SPECIFIC TO THE JOB DESCRIPTION)
+**CRITICAL RULES:**
+1. **EXACT Experience**: Start with "Software Engineer with {total_experience} of experience" - NO EXCEPTIONS
+2. **JD-Specific Keywords**: Scan the job description and EXPLICITLY mention 3-4 technologies/requirements from the JD
+3. **Biggest Achievement**: One metric that directly relates to the JD requirements
+4. **Differentiator**: Something that matches what this specific job values
 
-**CRITICAL:** Use the exact total experience value provided: "{total_experience}". For example, if provided "3.8 years", write "Software Engineer with 3.8 years of experience" NOT "2+ years".
+**BAD (Too Generic):**
+"A highly motivated Software Engineer with 2+ years of experience specializing in Java J2EE development and microservices architecture..."
 
-**EXAMPLE:**
-"Results-driven Software Engineer with 3.8 years building scalable distributed systems using Node.js, React.js, and AWS. Reduced P99 API latency by 35% and achieved 99.97% uptime across 15 production microservices. Recognized as Secure Code Warrior Champion (Rank 1/500+) for expertise in OWASP Top 10 vulnerability remediation."
+**GOOD (JD-Specific):**
+"Software Engineer with 3.8 years of experience specializing in Java, Spring Boot, and microservices architecture. Architected event-driven systems processing 10M+ daily transactions using Apache Kafka and Flink, directly matching your real-time data processing requirements. Ranked #1 in Secure Code Warrior competition among 500+ participants, with proven expertise in Fortify security scanning and CI/CD pipeline optimization."
+
+**MANDATORY:** The summary must read like it was written SPECIFICALLY for this job posting, not a generic template.
+
+### Experience Bullets (MAXIMUM 6 per role - FORCED 1 PAGE CONSTRAINT)
+**STRICT LIMIT: 6 bullets maximum per job role.**
+- If more than 6 bullets would be generated, select only the 6 most relevant to the JD
+- Prioritize bullets that mention technologies/requirements explicitly stated in the JD
+- Each bullet must demonstrate impact with specific metrics
+
+**Bullet Selection Priority:**
+1. Bullets mentioning JD-required technologies (exact matches first)
+2. Bullets with the most impressive quantified results
+3. Security-related achievements (if JD mentions security)
+4. Scale/performance achievements
+5. Leadership or cross-functional collaboration
+
+### Projects (MAXIMUM 1 project if needed for space)
+**STRICT LIMIT: Include projects ONLY if space permits on 1 page.**
+- If resume exceeds 1 page without projects, omit entirely
+- If included, limit to 1 project maximum
+- Focus on engineering challenges relevant to the JD
+
+### Achievements (MAXIMUM 2 items)
+**STRICT LIMIT: 2 achievements maximum.**
+- Security achievements first (if applicable)
+- Best Performer/Awards second
+- Keep each to one line maximum
 
 ### Skills (MUST be an object with two keys)
 Return skills as an OBJECT, not a list:
@@ -330,12 +360,17 @@ Generate exactly 3 achievement items:
 
 ---
 
-## 1-PAGE CONSTRAINT (CRITICAL)
-**The resume MUST fit on exactly 1 page. NO spillover to page 2.**
-- Experience: 8-10 bullets maximum
-- Projects: 1-2 bullets each
-- Achievements: 3 items only
-- Keep bullets to 1-2 lines maximum
+## 1-PAGE CONSTRAINT (CRITICAL - ENFORCED)
+**The resume MUST fit on exactly 1 page. Content exceeding 1 page will be REJECTED.**
+
+**HARD LIMITS (Enforced by system):**
+- Professional Summary: 3 sentences maximum
+- Experience: 6 bullets maximum per role
+- Projects: 1 project maximum (omit if space is tight)
+- Achievements: 2 items maximum
+- Education: List degrees only, no bullet points
+
+**If you generate more content than fits on 1 page, the system will DELETE sections automatically.**
 
 ## QUALITY CHECKLIST
 ✓ NO vague "performance" claims - specify latency/throughput/error rate
@@ -481,7 +516,62 @@ Return ONLY the JSON, no markdown code blocks, no explanations."""
     except Exception as e:
         raise ValueError(f"Failed to validate response schema: {e}")
     
+    # Post-process: Force correct experience in summary
+    tailored_resume = force_experience_in_summary(tailored_resume, total_experience)
+    
+    # Post-process: Enforce content limits for 1-page constraint
+    tailored_resume = enforce_page_limits(tailored_resume)
+    
     return tailored_resume
+
+
+def enforce_page_limits(resume: TailoredResume) -> TailoredResume:
+    """
+    Enforce content limits to ensure resume fits on 1 page.
+    Trims content if AI generated too much.
+    """
+    # Limit experience bullets to 6 per role
+    for exp in resume.experience:
+        if len(exp.bullets) > 6:
+            exp.bullets = exp.bullets[:6]
+    
+    # Limit projects to 1
+    if len(resume.projects) > 1:
+        resume.projects = resume.projects[:1]
+    
+    # Limit achievements to 2
+    if len(resume.achievements) > 2:
+        resume.achievements = resume.achievements[:2]
+    
+    return resume
+
+
+def force_experience_in_summary(resume: TailoredResume, total_experience: str) -> TailoredResume:
+    """
+    Force the correct experience duration into the professional summary.
+    Replaces any pattern like 'X+ years', 'X years', etc. with the calculated value.
+    """
+    if not resume.summary:
+        return resume
+    
+    summary = resume.summary
+    
+    # Pattern to match various experience formats
+    patterns = [
+        r'\d+\+?\s*years?',  # matches: 2+ years, 3 years, 4+ years, etc.
+        r'\d+\.\d+\s*years?',  # matches: 3.5 years, 2.8 years, etc.
+    ]
+    
+    # Extract the numeric part from total_experience
+    exp_match = re.search(r'([\d.]+)', total_experience)
+    if exp_match:
+        exp_value = exp_match.group(1)
+        # Replace any experience pattern with the correct value
+        for pattern in patterns:
+            summary = re.sub(pattern, f"{exp_value} years", summary, flags=re.IGNORECASE)
+    
+    resume.summary = summary
+    return resume
 
 
 def validate_master_resume(data: dict) -> bool:
