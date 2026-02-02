@@ -37,13 +37,13 @@ def sanitize_unicode_for_pdf(text: str) -> str:
         '\u201d': '"',  # Right double quotation mark
         '\u201e': '"',  # Double low-9 quotation mark
         '\u201f': '"',  # Double high-reversed-9 quotation mark
-        # Dashes
-        '\u2010': '-',  # Hyphen
-        '\u2011': '-',  # Non-breaking hyphen
-        '\u2012': '-',  # Figure dash
-        '\u2013': '-',  # En dash
-        '\u2014': '-',  # Em dash
-        '\u2015': '-',  # Horizontal bar
+        # Dashes - Standardize to em dash for consistency
+        '\u2010': '—',  # Hyphen -> em dash
+        '\u2011': '—',  # Non-breaking hyphen -> em dash
+        '\u2012': '—',  # Figure dash -> em dash
+        '\u2013': '—',  # En dash -> em dash
+        '\u2014': '—',  # Em dash (keep)
+        '\u2015': '—',  # Horizontal bar -> em dash
         # Spaces and separators
         '\u00a0': ' ',  # Non-breaking space
         '\u202f': ' ',  # Narrow no-break space
@@ -175,42 +175,55 @@ class ResumePDF(FPDF):
         ]
         metric_pattern = '(' + '|'.join(metric_patterns) + ')'
         
-        # Expanded ATS keywords to bold
+        # Expanded ATS keywords to bold - Comprehensive industry terminology coverage
         ats_keywords = [
             # Programming Languages
             'Java', 'Python', 'JavaScript', 'TypeScript', 'Go', 'Golang', 'Rust', 'C++', 'C#', 'Ruby', 'PHP', 'Scala', 'Kotlin',
+            'XML', 'JSON', 'YAML',
             # Frontend
-            'React', 'React.js', 'Angular', 'Vue', 'Vue.js', 'Next.js', 'HTML', 'CSS', 'SASS', 'Redux', 'Webpack',
+            'React', 'React.js', 'ReactJS', 'Angular', 'Vue', 'Vue.js', 'Next.js', 'HTML', 'CSS', 'SASS', 'Redux', 'Webpack',
             # Backend
-            'Node.js', 'Express', 'Express.js', 'Spring Boot', 'Spring', 'Django', 'FastAPI', 'Flask', 'Rails', 'NestJS',
+            'Node.js', 'NodeJS', 'Express', 'Express.js', 'Spring Boot', 'Spring', 'SpringBoot', 'Django', 'FastAPI', 'Flask', 'Rails', 'NestJS',
             # Databases
-            'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Cassandra', 'Oracle', 'SQL', 'NoSQL',
+            'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Cassandra', 'Oracle', 'SQL', 'NoSQL', 'SQLite',
+            'Firebase', 'Firestore', 'Database', 'DB',
             # Cloud & DevOps
-            'AWS', 'EC2', 'S3', 'Lambda', 'RDS', 'CloudWatch', 'ECS', 'EKS', 'GCP', 'Azure', 'Heroku',
-            'Docker', 'Kubernetes', 'K8s', 'Terraform', 'Ansible', 'Helm',
-            # CI/CD & Tools
-            'CI/CD', 'Jenkins', 'GitLab', 'GitHub', 'Git', 'CircleCI', 'Travis', 'ArgoCD',
-            'Playwright', 'Selenium', 'Cucumber', 'JUnit', 'Jest', 'Mocha', 'Pytest',
+            'AWS', 'EC2', 'S3', 'Lambda', 'RDS', 'CloudWatch', 'ECS', 'EKS', 'VPC', 'ELB', 'ALB', 'Route 53',
+            'GCP', 'Google Cloud', 'Azure', 'Heroku', 'Pivotal Cloud Foundry', 'PCF',
+            'Docker', 'Kubernetes', 'K8s', 'Terraform', 'Ansible', 'Helm', 'Jenkins', 'CI/CD', 'CICD',
+            # Tools & Platforms
+            'GitLab', 'GitHub', 'Git', 'Bitbucket', 'Jira', 'Confluence', 'Maven', 'Gradle', 'npm', 'yarn', 'pip',
+            'CircleCI', 'Travis', 'ArgoCD', 'TeamCity',
+            # Testing
+            'Playwright', 'Selenium', 'Cucumber', 'JUnit', 'Jest', 'Mocha', 'Pytest', 'TestNG', 'Mockito',
             # Messaging & Streaming
             'Kafka', 'RabbitMQ', 'SQS', 'SNS', 'Pub/Sub', 'ActiveMQ', 'Apache Kafka', 'Apache Flink', 'Apache Spark', 'Apache Airflow', 'Apache Storm',
             # API & Security
             'REST', 'RESTful', 'GraphQL', 'gRPC', 'API', 'APIs', 'OAuth', 'OAuth2', 'JWT', 'OWASP', '3Scale',
-            'Microservices', 'Serverless', 'Event-driven',
+            'Microservices', 'Serverless', 'Event-driven', 'Fortify', 'SSL', 'TLS', 'HTTPS',
             # Data & ML
-            'Hadoop', 'DBT', 'Spark', 'Presto', 'Hive', 'TensorFlow', 'PyTorch', 'ML', 'AI', 'NLP', 'LLM', 'BERT', 'GPT', 'YOLOv10', 'TensorFlow Lite',
+            'Hadoop', 'DBT', 'Spark', 'Presto', 'Hive', 'TensorFlow', 'PyTorch', 'ML', 'AI', 'NLP', 'LLM', 'BERT', 'GPT',
+            'YOLOv10', 'YOLO', 'TensorFlow Lite', 'Deep Learning', 'Machine Learning', 'Neural Network',
             # Monitoring & Observability
-            'Grafana', 'Prometheus', 'Splunk', 'Datadog', 'New Relic', 'ELK', 'Kibana', 'Postman', 'Fortify',
-            # Methodologies
-            'Agile', 'Scrum', 'Kanban', 'TDD', 'BDD', 'DevOps', 'SRE', 'SOLID',
-            # Action Verbs (Strong)
+            'Grafana', 'Prometheus', 'Splunk', 'Datadog', 'New Relic', 'ELK', 'Kibana', 'Postman', 'Fortify', 'SonarQube',
+            # Methodologies & Patterns
+            'Agile', 'Scrum', 'Kanban', 'TDD', 'BDD', 'DevOps', 'SRE', 'SOLID', 'Design Pattern', 'System Design',
+            'Data Structures', 'Algorithms', 'Object-oriented', 'OOP', 'CAP Theorem',
+            # Action Verbs (Strong Impact)
             'Architected', 'Engineered', 'Designed', 'Authored', 'Developed', 'Implemented', 'Deployed',
-            'Optimized', 'Reduced', 'Increased', 'Improved', 'Achieved', 'Slashed', 'Accelerated',
-            'Led', 'Managed', 'Directed', 'Spearheaded', 'Championed', 'Pioneered', 'Mentored',
-            'Built', 'Created', 'Automated', 'Migrated', 'Integrated', 'Collaborated', 'Orchestrated',
-            'Resolved', 'Revamped', 'Strengthened', 'Audited', 'Secured', 'Hardened', 'Remediated',
-            'Secured', 'Engineered', 'Led', 'Migrated', 'Accelerated', 'Revamped', 'Architected', 'Achieved',
-            # Additional terms
-            'Fiserv', 'Noida', 'Fiservs', 'GitLab', 'SpringBoot', 'Typescript', 'React.js', 'Node.Js',
+            'Optimized', 'Reduced', 'Increased', 'Improved', 'Achieved', 'Slashed', 'Accelerated', 'Enhanced', 'Elevated',
+            'Led', 'Managed', 'Directed', 'Spearheaded', 'Championed', 'Pioneered', 'Mentored', 'Coordinated',
+            'Built', 'Created', 'Automated', 'Migrated', 'Integrated', 'Collaborated', 'Orchestrated', 'Forged', 'Constructed',
+            'Resolved', 'Revamped', 'Strengthened', 'Audited', 'Secured', 'Hardened', 'Remediated', 'Prevented', 'Identified',
+            'Streamlined', 'Transformed', 'Refactored', 'Debugged', 'Tested', 'Deployed', 'Published',
+            # Company & Location Names
+            'Fiserv', 'Noida', 'Pune', 'Bhopal', 'India',
+            'Vellore Institute of Technology', 'Symbiosis International University',
+            # Education & Certifications
+            'MBA', 'B.Tech', 'Bachelor', 'Master', 'Computer Science', 'Business Analytics', 'Engineering',
+            # Metrics & Measurement Terms
+            'Efficiency', 'Performance', 'Reliability', 'Scalability', 'Throughput', 'Latency', 'Availability',
+            'Coverage', 'Accuracy', 'Precision', 'Recall',
         ]
         
         # Build regex for keywords - case insensitive matching but preserve original case in output
@@ -346,33 +359,41 @@ def generate_pdf(resume, output_path: str = None, include_summary: bool = True, 
     
     pdf.add_page()
 
-    # === NAME ===
+    # === HEADER: NAME ===
     pdf.set_font("Times", "B", 20)
     pdf.set_text_color(*BLACK)
     name = sanitize_unicode_for_pdf(resume.basics.name)
     pdf.multi_cell(0, 10, name, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    # === HEADER: CONTACT INFO LINE (Phone | Email | Location) ===
+    pdf.set_font("Times", "", 10)
     pdf.set_text_color(*BLACK)
-
-    # === CONTACT LINE (with icons) ===
-    pdf.ln(1)
-    contact_items = [
-        ("email.png", resume.basics.email),
-        ("phone.png", resume.basics.phone),
-    ]
-    pdf.icon_text_line(contact_items)
-
-    # === LINKS LINE (with icons) ===
+    
+    contact_line = f"{resume.basics.phone} | {resume.basics.email} | {resume.basics.location}"
+    contact_line = sanitize_unicode_for_pdf(contact_line)
+    pdf.multi_cell(0, 6, contact_line, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    # === HEADER: LINKS LINE (LinkedIn | GitHub) ===
     if resume.basics.links:
-        link_items = []
+        link_parts = []
         for link in resume.basics.links[:2]:
             clean_link = link.replace("https://", "").replace("http://", "")
-            if "github" in link.lower():
-                link_items.append(("github.png", clean_link))
-            elif "linkedin" in link.lower():
-                link_items.append(("linkedin.png", clean_link))
+            if "linkedin" in link.lower():
+                link_parts.append(f"LinkedIn: {clean_link}")
+            elif "github" in link.lower():
+                link_parts.append(f"GitHub: {clean_link}")
             else:
-                link_items.append((None, clean_link))
-        pdf.icon_text_line(link_items)
+                link_parts.append(clean_link)
+        
+        links_line = " | ".join(link_parts)
+        links_line = sanitize_unicode_for_pdf(links_line)
+        pdf.set_font("Times", "", 10)
+        pdf.multi_cell(0, 6, links_line, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    # === HEADER: SEPARATOR LINE ===
+    pdf.set_draw_color(*BLACK)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(2)
 
     if compact_mode:
         pdf.ln(1)
@@ -382,9 +403,17 @@ def generate_pdf(resume, output_path: str = None, include_summary: bool = True, 
     # === PROFESSIONAL SUMMARY (Optional) ===
     if include_summary and resume.summary:
         pdf.section_header("Professional Summary")
-        pdf.set_font("Times", "", 10)
+        
+        # Apply bold formatting to keywords and metrics in summary
         summary_text = sanitize_unicode_for_pdf(resume.summary)
-        pdf.multi_cell(0, 5, summary_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        # Ensure summary ends with a period
+        summary_text = summary_text.rstrip()
+        if summary_text and not summary_text.endswith(('.', '!', '?')):
+            summary_text += '.'
+        
+        pdf.set_font("Times", "", 10)
+        pdf.write_bullet_with_bold(summary_text, line_height=5)
+        
         if compact_mode:
             pdf.ln(1)
         else:
@@ -419,7 +448,7 @@ def generate_pdf(resume, output_path: str = None, include_summary: bool = True, 
             # Company, Location on left - Dates on right
             pdf.set_font("Times", "B", 11)
             company_text = sanitize_unicode_for_pdf(f"{exp.company}, {exp.location}")
-            date_text = sanitize_unicode_for_pdf(f"{exp.startDate} - {exp.endDate}")
+            date_text = sanitize_unicode_for_pdf(f"{exp.startDate} — {exp.endDate}")
 
             # Calculate positions
             date_width = pdf.get_string_width(date_text)
@@ -456,7 +485,7 @@ def generate_pdf(resume, output_path: str = None, include_summary: bool = True, 
             # Institution, Location on left - Dates on right
             pdf.set_font("Times", "B", 11)
             inst_text = sanitize_unicode_for_pdf(f"{edu.institution}, {edu.location}")
-            date_text = sanitize_unicode_for_pdf(f"{edu.startDate} - {edu.endDate}")
+            date_text = sanitize_unicode_for_pdf(f"{edu.startDate} — {edu.endDate}")
 
             date_width = pdf.get_string_width(date_text)
             page_width = pdf.w - pdf.l_margin - pdf.r_margin
@@ -477,17 +506,28 @@ def generate_pdf(resume, output_path: str = None, include_summary: bool = True, 
             pdf.set_font("Times", "B", 10)
             proj_name = sanitize_unicode_for_pdf(f"  - {proj.name}")
             pdf.multi_cell(0, 5, proj_name, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_font("Times", "", 10)
+            
+            # Process description with bold formatting for keywords and metrics
             desc = proj.description[:300] if len(proj.description) > 300 else proj.description
             # Ensure description ends with a period
             desc = desc.rstrip()
             if desc and not desc.endswith(('.', '!', '?')):
                 desc += '.'
             desc = sanitize_unicode_for_pdf(desc)
-            pdf.multi_cell(0, 5, f"    {desc}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            # Apply bold formatting to keywords and metrics in description
+            pdf.set_font("Times", "", 10)
+            pdf.cell(4, 5, " ")  # Indent
+            pdf.write_bullet_with_bold(desc, line_height=5)
+            
+            # Tech stack with bold keywords
+            pdf.set_font("Times", "I", 9)
+            pdf.cell(4, 4, " ")  # Indent
+            pdf.set_font("Times", "B", 9)
+            pdf.cell(12, 4, "Tech: ")
             pdf.set_font("Times", "I", 9)
             tech_stack = sanitize_unicode_for_pdf(proj.techStack)
-            pdf.multi_cell(0, 4, f"    Tech: {tech_stack}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.multi_cell(0, 4, tech_stack, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.ln(1)
 
     # === ACHIEVEMENTS ===
