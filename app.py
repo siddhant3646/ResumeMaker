@@ -236,24 +236,32 @@ def parse_resume_with_gemma(
     Raises:
         ValueError: If all retry attempts fail
     """
+    add_log("Initializing Google AI (gemma-3-27b-it)...", "processing")
+    
     if not GOOGLE_GENAI_AVAILABLE:
+        add_log("ERROR: google-generativeai library not available", "error")
         raise ImportError("google-generativeai library not available")
     
     # Configure the API
+    add_log("Configuring Google AI API...", "info")
     genai.configure(api_key=api_key)
     
     # Use gemma-3-27b-it model for parsing (as requested)
+    add_log("Loading gemma-3-27b-it model...", "info")
     model = genai.GenerativeModel("gemma-3-27b-it")
     
     # Build the prompt
     # Use replace() instead of format() to avoid issues with curly braces in resume text
     prompt = PARSING_PROMPT.replace("{resume_text}", resume_text)
+    add_log(f"Resume text length: {len(resume_text)} characters", "info")
     
     last_error = None
     last_response_text = ""
     
     for attempt in range(max_retries):
         try:
+            add_log(f"Attempt {attempt + 1}/{max_retries}: Sending request to Google AI...", "processing")
+            
             # Generate response
             response = model.generate_content(
                 prompt,
@@ -265,6 +273,8 @@ def parse_resume_with_gemma(
             
             if not response.text:
                 raise ValueError("Empty response from parsing API")
+            
+            add_log(f"Received response: {len(response.text)} characters", "success")
             
             # Clean up response text
             response_text = response.text.strip()
@@ -279,6 +289,7 @@ def parse_resume_with_gemma(
                 response_text = response_text[:-3]
             response_text = response_text.strip()
             
+            add_log("Parsing JSON response...", "processing")
             # Parse JSON into dict first
             parsed_data = json.loads(response_text)
             
@@ -289,12 +300,15 @@ def parse_resume_with_gemma(
                         if isinstance(project['techStack'], list):
                             project['techStack'] = ', '.join(project['techStack'])
             
+            add_log("Validating with Pydantic schema...", "processing")
             # Now validate with Pydantic
             parsed_resume = ParsedResume(**parsed_data)
             
             # Success! Return the parsed resume
             if attempt > 0:
-                print(f"✅ Successfully parsed resume after {attempt + 1} attempts")
+                add_log(f"Successfully parsed resume after {attempt + 1} attempts", "success")
+            else:
+                add_log("Resume parsed successfully!", "success")
             return parsed_resume
             
         except Exception as e:
@@ -309,12 +323,13 @@ def parse_resume_with_gemma(
                 current_delay = retry_delay * (2 ** attempt)
                 if is_rate_limit:
                     current_delay *= 2  # Extra delay for rate limits
-                    print(f"⚠️ Rate limit hit (429). Waiting longer...")
-                print(f"⚠️ Attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
-                print(f"   Retrying in {current_delay:.1f} seconds...")
+                    add_log(f"Rate limit hit (429). Waiting {current_delay:.1f}s...", "warning")
+                else:
+                    add_log(f"Attempt {attempt + 1} failed: {str(e)[:80]}...", "warning")
                 time.sleep(current_delay)
             else:
                 # All retries exhausted
+                add_log(f"All {max_retries} attempts failed", "error")
                 break
     
     # All retries failed
@@ -524,14 +539,18 @@ def tailor_resume_with_nvidia(
     Raises:
         ValueError: If all retry attempts fail
     """
+    add_log("Initializing NVIDIA API (Kimi k2.5)...", "processing")
+    
     # NVIDIA API endpoint for Kimi k2.5
     invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
     stream = False  # Non-streaming for easier JSON parsing
     
     # Build the prompt
+    add_log("Building tailoring prompt...", "info")
     master_resume_json_str = json.dumps(master_resume, indent=2)
     prompt = TAILORING_PROMPT.replace("{master_resume_json}", master_resume_json_str)
     prompt = prompt.replace("{job_description}", job_description)
+    add_log(f"Prompt size: {len(prompt)} characters", "info")
     
     headers = {
         "Authorization": f"Bearer {nvidia_api_key}",
@@ -553,9 +572,13 @@ def tailor_resume_with_nvidia(
     
     for attempt in range(max_retries):
         try:
+            add_log(f"Attempt {attempt + 1}/{max_retries}: Sending request to NVIDIA API...", "processing")
+            add_log("This may take 30-60 seconds...", "info")
+            
             response = requests.post(invoke_url, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
             
+            add_log("Response received from NVIDIA API", "success")
             data = response.json()
             
             if 'choices' not in data or len(data['choices']) == 0:
@@ -566,9 +589,11 @@ def tailor_resume_with_nvidia(
             if not response_text:
                 raise ValueError("Empty response from tailoring API")
             
+            add_log(f"Tailored resume generated: {len(response_text)} characters", "success")
+            
             # Success! Return the response text and model name
             if attempt > 0:
-                print(f"✅ Successfully tailored resume after {attempt + 1} attempts")
+                add_log(f"Successfully tailored after {attempt + 1} attempts", "success")
             return response_text, "kimi-k2.5-nvidia"
             
         except requests.exceptions.RequestException as e:
@@ -583,21 +608,22 @@ def tailor_resume_with_nvidia(
                 current_delay = retry_delay * (2 ** attempt)
                 if is_rate_limit:
                     current_delay *= 2
-                    print(f"⚠️ Rate limit hit. Waiting longer...")
-                
-                print(f"⚠️ Tailoring attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
-                print(f"   Retrying in {current_delay:.1f} seconds...")
+                    add_log(f"Rate limit hit. Waiting {current_delay:.1f}s...", "warning")
+                else:
+                    add_log(f"Attempt {attempt + 1} failed: {str(e)[:80]}...", "warning")
                 time.sleep(current_delay)
             else:
                 # All retries exhausted
+                add_log(f"All {max_retries} attempts failed", "error")
                 break
         except Exception as e:
             last_error = e
             if attempt < max_retries - 1:
                 current_delay = retry_delay * (2 ** attempt)
-                print(f"⚠️ Attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
+                add_log(f"Attempt {attempt + 1} failed: {str(e)[:80]}...", "warning")
                 time.sleep(current_delay)
             else:
+                add_log(f"All {max_retries} attempts failed", "error")
                 break
     
     # All retries failed
@@ -694,6 +720,45 @@ def init_session_state():
         st.session_state.tailored_response_text = ""
     if 'step' not in st.session_state:
         st.session_state.step = 1
+    if 'logs' not in st.session_state:
+        st.session_state.logs = []
+    if 'is_processing' not in st.session_state:
+        st.session_state.is_processing = False
+
+
+def add_log(message: str, log_type: str = "info"):
+    """Add a log entry to the session state logs."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    icon = {"info": "ℹ️", "success": "✅", "warning": "⚠️", "error": "❌", "processing": "🔄"}.get(log_type, "ℹ️")
+    st.session_state.logs.append({"time": timestamp, "message": message, "type": log_type, "icon": icon})
+    # Keep only last 50 logs to prevent memory issues
+    if len(st.session_state.logs) > 50:
+        st.session_state.logs = st.session_state.logs[-50:]
+
+
+def clear_logs():
+    """Clear all logs."""
+    st.session_state.logs = []
+
+
+def render_logs_sidebar():
+    """Render the logs in the sidebar."""
+    with st.sidebar:
+        st.markdown("### 📋 Activity Logs")
+        
+        # Clear logs button
+        if st.button("🗑️ Clear Logs", use_container_width=True):
+            clear_logs()
+            st.rerun()
+        
+        st.divider()
+        
+        # Display logs in reverse order (newest first)
+        if st.session_state.logs:
+            for log in reversed(st.session_state.logs):
+                st.markdown(f"**{log['time']}** {log['icon']} {log['message']}")
+        else:
+            st.info("No activity yet. Start processing to see logs.")
 
 
 def sanitize_filename(name: str) -> str:
@@ -712,8 +777,11 @@ def main():
         page_title="Resume Tailor",
         page_icon="📝",
         layout="centered",
-        initial_sidebar_state="collapsed"
+        initial_sidebar_state="expanded"
     )
+    
+    # Render logs in sidebar
+    render_logs_sidebar()
     
     # Custom CSS for better styling
     st.markdown("""
@@ -793,26 +861,41 @@ def main():
             )
             
             if uploaded_file is not None:
+                # Clear logs when starting new processing
+                clear_logs()
+                add_log("Starting Step 1: Resume Upload & Parsing", "info")
+                
                 with st.spinner("🔍 Extracting text from PDF..."):
                     try:
                         # Extract text from PDF
+                        add_log(f"Processing file: {uploaded_file.name}", "info")
                         file_bytes = uploaded_file.getvalue()
+                        add_log(f"File size: {len(file_bytes)} bytes", "info")
+                        
                         extracted_text = extract_text_from_pdf(file_bytes)
+                        add_log(f"Extracted {len(extracted_text)} characters from PDF", "success")
                         
                         if not extracted_text.strip():
+                            add_log("ERROR: No text found in PDF", "error")
                             st.error("❌ Could not extract text from PDF. Please ensure it's a text-based PDF.")
                         else:
                             # Parse resume with Gemma 3 27B
                             with st.spinner("🤖 Parsing resume with gemma-3-27b-it..."):
+                                add_log("Starting AI parsing with gemma-3-27b-it...", "processing")
                                 parsed_resume = parse_resume_with_gemma(
                                     extracted_text,
                                     api_keys["google"]
                                 )
+                                add_log(f"Parsed resume for: {parsed_resume.basics.name}", "success")
+                                add_log(f"Found {len(parsed_resume.experience)} experience entries", "info")
+                                add_log(f"Found {len(parsed_resume.education)} education entries", "info")
                                 st.session_state.parsed_resume = parsed_resume
                                 st.session_state.step = 2
+                                add_log("Moving to Step 2", "info")
                                 st.rerun()
                                 
                     except Exception as e:
+                        add_log(f"ERROR: {str(e)[:100]}", "error")
                         st.error(f"❌ Error processing resume: {str(e)}")
             
             st.markdown("</div>", unsafe_allow_html=True)
@@ -853,12 +936,19 @@ def main():
                     if not job_description.strip():
                         st.warning("⚠️ Please enter a job description.")
                     else:
+                        # Clear previous logs and start fresh
+                        clear_logs()
+                        add_log("Starting Step 2: Resume Tailoring", "info")
+                        add_log(f"Job description length: {len(job_description)} characters", "info")
+                        
                         with st.spinner("✨ Tailoring your resume with Kimi k2.5 (NVIDIA)..."):
                             try:
                                 # Convert ParsedResume to dict for tailoring
+                                add_log("Converting resume to dictionary format...", "info")
                                 resume_dict = st.session_state.parsed_resume.model_dump()
                                 
                                 # Tailor resume using NVIDIA Kimi k2.5
+                                add_log("Sending request to NVIDIA API (Kimi k2.5)...", "processing")
                                 response_text, model_used = tailor_resume_with_nvidia(
                                     resume_dict,
                                     job_description,
@@ -866,16 +956,22 @@ def main():
                                 )
                                 
                                 # Store response
+                                add_log("Response received, parsing results...", "processing")
                                 st.session_state.tailored_response_text = response_text
                                 st.session_state.model_used = model_used
                                 
                                 # Parse the tailored response
                                 tailored_resume = parse_tailored_response(response_text)
+                                add_log(f"Tailored resume for: {tailored_resume.basics.name}", "success")
+                                add_log(f"Summary length: {len(tailored_resume.summary)} characters", "info")
+                                
                                 st.session_state.tailored_resume = tailored_resume
                                 st.session_state.step = 3
+                                add_log("Moving to Step 3 (Download)", "info")
                                 st.rerun()
                                 
                             except Exception as e:
+                                add_log(f"ERROR: {str(e)[:100]}", "error")
                                 st.error(f"❌ Error tailoring resume: {str(e)}")
             
             st.markdown("</div>", unsafe_allow_html=True)
