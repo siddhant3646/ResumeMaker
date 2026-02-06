@@ -4,7 +4,7 @@ Resume Tailor - Streamlit Web Application
 
 A secure web application that takes a Resume (PDF or Text) and a Job Description,
 parses the resume into structured JSON using gemma-3-27b-it, then generates a
-tailored ATS-friendly resume using Groq API.
+tailored ATS-friendly resume using Kimi k2.5 model via NVIDIA API.
 
 Security Features:
 - API keys are encrypted and stored in the repository
@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Generator, Optional, Union
 
 import pdfplumber
+import requests
 import streamlit as st
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -39,113 +40,6 @@ try:
     GOOGLE_GENAI_AVAILABLE = True
 except ImportError:
     GOOGLE_GENAI_AVAILABLE = False
-
-
-# ============================================================================
-# Model Router - Tiered Fallback System with Daily Counters
-# ============================================================================
-
-class ModelRouter:
-    """
-    Manages tiered model selection with daily request counters.
-    
-    Tier 1: gemini-2.0-flash (20 requests/day)
-    Tier 2: gemini-2.5-flash-preview-05-06 (20 requests/day)
-    Tier 3: gemini-2.5-flash-lite-preview-06-17 (20 requests/day)
-    Tier 4: gemma-3-27b-it (unlimited)
-    
-    Counters reset at midnight UTC daily.
-    """
-    
-    # Model configuration
-    MODELS = [
-        {"name": "gemini-2.0-flash", "limit": 20, "tier": 1},
-        {"name": "gemini-2.5-flash-preview-05-06", "limit": 20, "tier": 2},
-        {"name": "gemini-2.5-flash-lite-preview-06-17", "limit": 20, "tier": 3},
-        {"name": "gemma-3-27b-it", "limit": float('inf'), "tier": 4},  # Unlimited
-    ]
-    
-    def __init__(self):
-        """Initialize or load counters from session state."""
-        self._init_counters()
-    
-    def _init_counters(self):
-        """Initialize counters in session state if not present."""
-        # Check if we need to reset (new day in UTC)
-        current_date = datetime.utcnow().strftime("%Y-%m-%d")
-        
-        if 'model_router_date' not in st.session_state:
-            st.session_state.model_router_date = current_date
-        
-        # Reset counters if it's a new day
-        if st.session_state.model_router_date != current_date:
-            st.session_state.model_router_date = current_date
-            for model in self.MODELS:
-                st.session_state[f"model_counter_{model['name']}"] = 0
-        
-        # Initialize counters if not present
-        for model in self.MODELS:
-            key = f"model_counter_{model['name']}"
-            if key not in st.session_state:
-                st.session_state[key] = 0
-    
-    def get_model_for_request(self) -> str:
-        """
-        Get the appropriate model based on daily usage counters.
-        
-        Returns:
-            Model name to use for the request
-        """
-        self._init_counters()  # Ensure counters are fresh
-        
-        for model in self.MODELS:
-            counter_key = f"model_counter_{model['name']}"
-            current_count = st.session_state.get(counter_key, 0)
-            
-            if current_count < model['limit']:
-                # Increment counter and return this model
-                st.session_state[counter_key] = current_count + 1
-                return model['name']
-        
-        # Fallback to last model (gemma-3-27b-it) which has unlimited usage
-        # Still increment counter for tracking
-        counter_key = f"model_counter_{self.MODELS[-1]['name']}"
-        st.session_state[counter_key] = st.session_state.get(counter_key, 0) + 1
-        return self.MODELS[-1]['name']
-    
-    def get_current_tier_info(self) -> dict:
-        """
-        Get information about current tier usage.
-        
-        Returns:
-            Dictionary with tier information
-        """
-        self._init_counters()
-        
-        info = []
-        for model in self.MODELS:
-            counter_key = f"model_counter_{model['name']}"
-            count = st.session_state.get(counter_key, 0)
-            limit = model['limit'] if model['limit'] != float('inf') else '∞'
-            percentage = (count / model['limit'] * 100) if model['limit'] != float('inf') else 0
-            
-            info.append({
-                'tier': model['tier'],
-                'model': model['name'],
-                'used': count,
-                'limit': limit,
-                'percentage': percentage,
-                'active': count < model['limit'] if model['limit'] != float('inf') else True
-            })
-        
-        return info
-    
-    def reset_counters(self):
-        """Manually reset all counters (for testing)."""
-        current_date = datetime.utcnow().strftime("%Y-%m-%d")
-        st.session_state.model_router_date = current_date
-        for model in self.MODELS:
-            st.session_state[f"model_counter_{model['name']}"] = 0
 
 
 # ============================================================================
@@ -190,11 +84,11 @@ def get_decrypted_api_keys() -> dict[str, Optional[str]]:
     Get decrypted API keys from Streamlit secrets.
     
     Returns:
-        Dictionary with 'google' and 'groq' keys containing decrypted API keys
+        Dictionary with 'google' and 'nvidia' keys containing decrypted API keys
     """
     keys = {
         "google": None,
-        "groq": None
+        "nvidia": None
     }
     
     try:
@@ -209,10 +103,10 @@ def get_decrypted_api_keys() -> dict[str, Optional[str]]:
         if encrypted_google:
             keys["google"] = decrypt_api_key(encrypted_google, password)
         
-        # Decrypt Groq API key
-        encrypted_groq = st.secrets.get("GROQ_API_KEY_ENCRYPTED")
-        if encrypted_groq:
-            keys["groq"] = decrypt_api_key(encrypted_groq, password)
+        # Decrypt NVIDIA API key
+        encrypted_nvidia = st.secrets.get("NVIDIA_API_KEY_ENCRYPTED")
+        if encrypted_nvidia:
+            keys["nvidia"] = decrypt_api_key(encrypted_nvidia, password)
             
     except Exception as e:
         st.error(f"🔐 Decryption error: {e}")
@@ -327,7 +221,7 @@ def parse_resume_with_gemma(
     retry_delay: float = 2.0
 ) -> ParsedResume:
     """
-    Parse resume text into structured JSON using gemma-3-12b-it via Google AI Studio.
+    Parse resume text into structured JSON using gemma-3-27b-it via Google AI Studio.
     Includes retry logic for handling transient failures and rate limits (429 errors).
     
     Args:
@@ -348,8 +242,8 @@ def parse_resume_with_gemma(
     # Configure the API
     genai.configure(api_key=api_key)
     
-    # Use gemma-3-12b-it model for parsing (lighter, faster)
-    model = genai.GenerativeModel("gemma-3-12b-it")
+    # Use gemma-3-27b-it model for parsing (as requested)
+    model = genai.GenerativeModel("gemma-3-27b-it")
     
     # Build the prompt
     # Use replace() instead of format() to avoid issues with curly braces in resume text
@@ -431,7 +325,7 @@ def parse_resume_with_gemma(
 
 
 # ============================================================================
-# Resume Tailoring - Using Groq
+# Resume Tailoring - Using NVIDIA Kimi k2.5 API
 # ============================================================================
 
 TAILORING_PROMPT = """You are a SENIOR TECHNICAL RECRUITER and EXPERT RESUME WRITER with 15+ years of experience hiring for Fortune 500 companies. You are an expert in ATS systems and what makes senior hiring managers say "Let's interview this person."
@@ -606,23 +500,21 @@ Return a JSON object with this EXACT structure:
 5. Return ONLY valid JSON, no markdown code blocks, no explanations."""
 
 
-def tailor_resume_with_model_router(
+def tailor_resume_with_nvidia(
     master_resume: dict,
     job_description: str,
-    api_key: str,
-    model_router: ModelRouter,
+    nvidia_api_key: str,
     max_retries: int = 3,
     retry_delay: float = 2.0
 ) -> tuple[str, str]:
     """
-    Tailor resume using tiered model selection via ModelRouter.
-    Includes retry logic for handling transient failures and rate limits (429 errors).
+    Tailor resume using Kimi k2.5 model via NVIDIA API.
+    Includes retry logic for handling transient failures and rate limits.
     
     Args:
         master_resume: The parsed resume as a dictionary
         job_description: The job description text
-        api_key: Google AI Studio API key
-        model_router: ModelRouter instance for tiered selection
+        nvidia_api_key: NVIDIA API key for integrate.api.nvidia.com
         max_retries: Maximum number of retry attempts (default: 3)
         retry_delay: Initial delay between retries in seconds (default: 2.0)
         
@@ -632,78 +524,80 @@ def tailor_resume_with_model_router(
     Raises:
         ValueError: If all retry attempts fail
     """
-    if not GOOGLE_GENAI_AVAILABLE:
-        raise ImportError("google-generativeai library not available")
-    
-    # Configure the API
-    genai.configure(api_key=api_key)
+    # NVIDIA API endpoint for Kimi k2.5
+    invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+    stream = False  # Non-streaming for easier JSON parsing
     
     # Build the prompt
     master_resume_json_str = json.dumps(master_resume, indent=2)
     prompt = TAILORING_PROMPT.replace("{master_resume_json}", master_resume_json_str)
     prompt = prompt.replace("{job_description}", job_description)
     
+    headers = {
+        "Authorization": f"Bearer {nvidia_api_key}",
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": "moonshotai/kimi-k2.5",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 16384,
+        "temperature": 1.00,
+        "top_p": 1.00,
+        "stream": stream,
+        "chat_template_kwargs": {"thinking": True}
+    }
+    
     last_error = None
-    model_name = None
     
     for attempt in range(max_retries):
         try:
-            # Get model from router (only on first attempt or after certain errors)
-            if attempt == 0 or model_name is None:
-                model_name = model_router.get_model_for_request()
-                print(f"🤖 Using model: {model_name}")
+            response = requests.post(invoke_url, headers=headers, json=payload, timeout=120)
+            response.raise_for_status()
             
-            # Create model instance
-            model = genai.GenerativeModel(model_name)
+            data = response.json()
             
-            # Generate response
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.7,
-                    max_output_tokens=8192,
-                )
-            )
+            if 'choices' not in data or len(data['choices']) == 0:
+                raise ValueError("Empty response from NVIDIA API")
             
-            if not response.text:
+            response_text = data['choices'][0]['message']['content']
+            
+            if not response_text:
                 raise ValueError("Empty response from tailoring API")
             
             # Success! Return the response text and model name
             if attempt > 0:
                 print(f"✅ Successfully tailored resume after {attempt + 1} attempts")
-            return response.text, model_name
+            return response_text, "kimi-k2.5-nvidia"
             
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             last_error = e
             error_str = str(e).lower()
             
-            # Check for rate limit (429) or quota errors
-            is_rate_limit = any(x in error_str for x in ['429', 'rate limit', 'quota', 'resource exhausted'])
-            is_quota_exceeded = 'quota exceeded' in error_str or 'limit: 0' in error_str
+            # Check for rate limit errors
+            is_rate_limit = any(x in error_str for x in ['429', 'rate limit', 'too many requests'])
             
             if attempt < max_retries - 1:
                 # Calculate exponential backoff delay
                 current_delay = retry_delay * (2 ** attempt)
-                
-                if is_quota_exceeded:
-                    # All Gemini models share the same quota on free tier
-                    # Skip directly to Gemma 3 27B (unlimited)
-                    print(f"⚠️ Quota exceeded for {model_name}. Skipping to Gemma 3 27B...")
-                    model_name = "gemma-3-27b-it"
-                    # Mark all Gemini tiers as exhausted
-                    for m in model_router.MODELS[:3]:  # First 3 are Gemini models
-                        st.session_state[f"model_counter_{m['name']}"] = m['limit']
-                elif is_rate_limit:
-                    current_delay *= 2  # Extra delay for rate limits
-                    print(f"⚠️ Rate limit hit (429). Waiting longer...")
-                    # Try next tier model on rate limit
-                    model_name = None  # Force model router to select next tier
+                if is_rate_limit:
+                    current_delay *= 2
+                    print(f"⚠️ Rate limit hit. Waiting longer...")
                 
                 print(f"⚠️ Tailoring attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
                 print(f"   Retrying in {current_delay:.1f} seconds...")
                 time.sleep(current_delay)
             else:
                 # All retries exhausted
+                break
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                current_delay = retry_delay * (2 ** attempt)
+                print(f"⚠️ Attempt {attempt + 1}/{max_retries} failed: {str(e)[:100]}...")
+                time.sleep(current_delay)
+            else:
                 break
     
     # All retries failed
@@ -712,10 +606,10 @@ def tailor_resume_with_model_router(
 
 def parse_tailored_response(response_text: str) -> ParsedResume:
     """
-    Parse the Groq response into a ParsedResume object.
+    Parse the tailored response into a ParsedResume object.
     
     Args:
-        response_text: The full text response from Groq
+        response_text: The full text response from the AI model
         
     Returns:
         ParsedResume object
@@ -725,7 +619,7 @@ def parse_tailored_response(response_text: str) -> ParsedResume:
     """
     # Check for empty response
     if not response_text or not response_text.strip():
-        raise ValueError("Empty response from Groq API. The model may have failed to generate output.")
+        raise ValueError("Empty response from API. The model may have failed to generate output.")
     
     # Clean up response text
     text = response_text.strip()
@@ -741,7 +635,7 @@ def parse_tailored_response(response_text: str) -> ParsedResume:
     
     # Check again after cleaning
     if not text:
-        raise ValueError("Empty response from Groq API after cleaning markdown.")
+        raise ValueError("Empty response from API after cleaning markdown.")
     
     # Parse JSON into dict first
     try:
@@ -873,12 +767,14 @@ def main():
     # Get decrypted API keys
     api_keys = get_decrypted_api_keys()
     
+    # Check for required API keys
     if not api_keys["google"]:
         st.error("🔐 Google API key not configured. Please set up Streamlit secrets.")
         st.stop()
     
-    # Initialize model router
-    model_router = ModelRouter()
+    if not api_keys["nvidia"]:
+        st.error("🔐 NVIDIA API key not configured. Please set up Streamlit secrets.")
+        st.stop()
     
     # Step indicator
     st.markdown(f"### Step {st.session_state.step} of 3")
@@ -888,7 +784,7 @@ def main():
         with st.container():
             st.markdown("<div class='step-container'>", unsafe_allow_html=True)
             st.subheader("📄 Upload Your Resume")
-            st.write("Upload your resume in PDF format. We'll extract the text and parse it into a structured format.")
+            st.write("Upload your resume in PDF format. We'll extract the text and parse it into a structured format using gemma-3-27b-it.")
             
             uploaded_file = st.file_uploader(
                 "Choose a PDF file",
@@ -906,8 +802,8 @@ def main():
                         if not extracted_text.strip():
                             st.error("❌ Could not extract text from PDF. Please ensure it's a text-based PDF.")
                         else:
-                            # Parse resume with Gemma
-                            with st.spinner("🤖 Parsing resume with AI..."):
+                            # Parse resume with Gemma 3 27B
+                            with st.spinner("🤖 Parsing resume with gemma-3-27b-it..."):
                                 parsed_resume = parse_resume_with_gemma(
                                     extracted_text,
                                     api_keys["google"]
@@ -936,7 +832,7 @@ def main():
         with st.container():
             st.markdown("<div class='step-container'>", unsafe_allow_html=True)
             st.subheader("💼 Job Description")
-            st.write("Paste the job description you're applying for. Our AI will tailor your resume to match.")
+            st.write("Paste the job description you're applying for. Our AI will tailor your resume to match using Kimi k2.5 via NVIDIA.")
             
             job_description = st.text_area(
                 "Job Description",
@@ -957,17 +853,16 @@ def main():
                     if not job_description.strip():
                         st.warning("⚠️ Please enter a job description.")
                     else:
-                        with st.spinner("✨ Tailoring your resume with AI..."):
+                        with st.spinner("✨ Tailoring your resume with Kimi k2.5 (NVIDIA)..."):
                             try:
                                 # Convert ParsedResume to dict for tailoring
                                 resume_dict = st.session_state.parsed_resume.model_dump()
                                 
-                                # Tailor resume
-                                response_text, model_used = tailor_resume_with_model_router(
+                                # Tailor resume using NVIDIA Kimi k2.5
+                                response_text, model_used = tailor_resume_with_nvidia(
                                     resume_dict,
                                     job_description,
-                                    api_keys["google"],
-                                    model_router
+                                    api_keys["nvidia"]
                                 )
                                 
                                 # Store response
@@ -992,7 +887,7 @@ def main():
         if tailored_resume:
             # Success message
             st.markdown("<div class='success-box'>", unsafe_allow_html=True)
-            st.success("✅ Resume tailored successfully!")
+            st.success(f"✅ Resume tailored successfully with {st.session_state.model_used}!")
             st.markdown("</div>", unsafe_allow_html=True)
             
             # Preview tailored resume

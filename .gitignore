@@ -1,5 +1,65 @@
+# Streamlit secrets (local testing)
 .streamlit/
-encrypt_helper.py
-__pycache__/
-*.pyc
+
+# Encrypted API keys file (contains sensitive data)
+.encrypted_keys
+
+# Environment variables (contains plaintext API keys)
 .env
+.env.local
+.env.*.local
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build and distribution directories
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Logs
+*.log
+
+# Generated files (resumes, outputs)
+*.pdf
+output/
+outputs/
+downloads/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Helper scripts that might contain sensitive data
+encrypt_helper.py
+
