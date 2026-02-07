@@ -320,6 +320,9 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
+    # Get current step
+    current_step = st.session_state.step
+    
     # Render appropriate step
     if current_step == 1:
         render_step_1_upload()
