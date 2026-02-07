@@ -12,40 +12,105 @@ Features:
 - 2026 modern UI design
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Add current directory to Python path for Streamlit Cloud
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+
 import base64
 import io
 import json
 import re
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import pdfplumber
-import requests
+# Safe imports with error handling
+def safe_import(module_name, package_name=None):
+    """Safely import a module with error handling"""
+    try:
+        if package_name:
+            return __import__(module_name, fromlist=[package_name])
+        return __import__(module_name)
+    except ImportError as e:
+        print(f"⚠️ Warning: Could not import {module_name}: {e}")
+        print(f"   Make sure {package_name or module_name} is in requirements.txt")
+        return None
+
+# Try to import required modules
+pdfplumber = safe_import('pdfplumber')
+requests = safe_import('requests')
+streamlit = safe_import('streamlit')
+
+if streamlit is None:
+    print("❌ Critical: Streamlit is required but not installed")
+    sys.exit(1)
+
 import streamlit as st
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-# Import new modules
-from ui.themes import inject_modern_theme, get_modern_css, ModernTheme
-from ui.animations import animation_manager
-from core.models import (
-    ParsedResume, TailoredResume, JobAnalysis, GenerationConfig,
-    ATSScore, ValidationReport, GenerationResult, UIState, Experience, Project
-)
+# Import new modules - try relative imports first
+try:
+    from ui.themes import inject_modern_theme, get_modern_css, ModernTheme
+    from ui.animations import animation_manager
+except ImportError:
+    # Fallback for Streamlit Cloud
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))
+    from ui.themes import inject_modern_theme, get_modern_css, ModernTheme
+    from ui.animations import animation_manager
 
-# Import intelligence modules
-from intelligence.role_detector import RoleDetector
-from intelligence.content_generator import ContentGenerator
-from intelligence.ats_scorer import ATSScorer
-from intelligence.regeneration_controller import RegenerationController
-from intelligence.page_manager import PageManager
-from vision.pdf_validator import PDFValidator
+# Import core models - try relative imports first
+try:
+    from core.models import (
+        ParsedResume, TailoredResume, JobAnalysis, GenerationConfig,
+        ATSScore, ValidationReport, GenerationResult, UIState, Experience, Project
+    )
+except ImportError:
+    # Fallback for Streamlit Cloud
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))
+    from core.models import (
+        ParsedResume, TailoredResume, JobAnalysis, GenerationConfig,
+        ATSScore, ValidationReport, GenerationResult, UIState, Experience, Project
+    )
 
-# Import consolidated PDF renderer
-from renderer import generate_pdf_to_bytes
+# Import intelligence modules - try relative imports first
+try:
+    from intelligence.role_detector import RoleDetector
+    from intelligence.content_generator import ContentGenerator
+    from intelligence.ats_scorer import ATSScorer
+    from intelligence.regeneration_controller import RegenerationController
+    from intelligence.page_manager import PageManager
+    from vision.pdf_validator import PDFValidator
+except ImportError:
+    # Fallback for Streamlit Cloud
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))
+    from intelligence.role_detector import RoleDetector
+    from intelligence.content_generator import ContentGenerator
+    from intelligence.ats_scorer import ATSScorer
+    from intelligence.regeneration_controller import RegenerationController
+    from intelligence.page_manager import PageManager
+    from vision.pdf_validator import PDFValidator
+
+# Import consolidated PDF renderer - try relative imports first
+try:
+    from renderer import generate_pdf_to_bytes
+except ImportError:
+    # Fallback for Streamlit Cloud
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent))
+    from renderer import generate_pdf_to_bytes
 
 # Try to import google-generativeai
 try:
