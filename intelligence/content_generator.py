@@ -297,22 +297,27 @@ Return a JSON array of improved bullets:
         
         try:
             # Use AI model (KimiK2.5 primary, StepFun fallback) for regeneration
+            print(f"DEBUG: Starting regeneration with {len(ats_feedback.shortcomings)} shortcomings")
             improved_bullets = self._call_ai_model_for_improvement(improvement_prompt)
             
             # Apply improvements to resume
+            print(f"DEBUG: Applying {len(improved_bullets)} improvements to resume")
             improved_resume = self._apply_improvements(
                 previous_resume, improved_bullets, job_analysis, ats_feedback
             )
             
             # Recalculate ATS score
+            print(f"DEBUG: Recalculating ATS score for improved resume")
             improved_resume.ats_score = self.ats_scorer.calculate_score(
                 improved_resume, job_analysis
             )
+            print(f"DEBUG: New ATS score: {improved_resume.ats_score.overall if improved_resume.ats_score else 'None'}")
             
             improved_resume.fabrication_notes.append(
                 f"Regenerated with ATS feedback. Previous score: {ats_feedback.overall}"
             )
             
+            print(f"DEBUG: Returning improved resume with {len(improved_resume.fabrication_notes)} fabrication notes")
             return improved_resume
             
         except Exception as e:

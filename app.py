@@ -571,9 +571,11 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
             
             # Track best result
             current_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0
+            print(f"DEBUG: Attempt {attempt} - Current score: {current_score}, Best score: {best_score}")
             if current_score > best_score and tailored:
                 best_score = current_score
                 best_tailored = tailored
+                print(f"DEBUG: New best score: {best_score}")
                 if job_analysis:
                     st.session_state.job_analysis = job_analysis
                 st.session_state.tailored_resume = tailored
