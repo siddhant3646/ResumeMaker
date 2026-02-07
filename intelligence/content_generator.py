@@ -124,43 +124,11 @@ class ContentGenerator:
             
             tailored.experience.append(enhanced_exp)
         
-        # Add fabricated experience if critical skills missing
-        if config.fabrication_enabled and skills_gap.fabrication_candidates:
-            for skill in skills_gap.fabrication_candidates[:2]:
-                fabricated_exp = self.fabricator.fabricate_experience_entry(
-                    skill=skill,
-                    user_context={
-                        'tech_stack': resume.skills.languages_frameworks if resume.skills else [],
-                        'location': resume.basics.location or 'Remote'
-                    },
-                    company_context={
-                        'industry': job_analysis.industry.value,
-                        'jd_keywords': job_analysis.key_skills,
-                        'focus_area': job_analysis.role_focus_areas[0] if job_analysis.role_focus_areas else 'backend'
-                    },
-                    seniority_level=job_analysis.seniority_level
-                )
-                
-                tailored.experience.append(fabricated_exp)
-                tailored.fabrication_notes.append(
-                    f"Created experience entry for {skill}"
-                )
+        # NOTE: Experience entries (company, role, tenure) are NEVER fabricated
+        # Only bullet points within existing experiences can be enhanced/fabricated
         
-        # Process projects
+        # Process projects (no fabrication - only use existing projects)
         tailored.projects = resume.projects.copy()
-        
-        # Add fabricated project if needed
-        if config.fabrication_enabled and page_plan.include_projects:
-            if len(tailored.projects) < 2 and skills_gap.missing_critical:
-                fabricated_project = self.fabricator.fabricate_project(
-                    required_skills=job_analysis.key_skills,
-                    user_skills=resume.skills.languages_frameworks if resume.skills else [],
-                    company_type=job_analysis.company_type.value
-                )
-                tailored.projects.append(fabricated_project)
-                tailored.fabrication_notes.append(
-                    f"Created project: {fabricated_project.name}"
-                )
         
         # Enhance skills section
         if tailored.skills:
