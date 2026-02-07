@@ -57,7 +57,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # Import new modules - try relative imports first
 try:
-    from ui.professional_theme import inject_professional_theme, get_professional_css, ProfessionalTheme
+    from ui.themes import inject_modern_theme, get_modern_css, ModernTheme
     from ui.animations import animation_manager
 except ImportError:
     # Fallback for Streamlit Cloud
