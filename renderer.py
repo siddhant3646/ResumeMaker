@@ -390,7 +390,7 @@ class ResumePDF(FPDF):
             
             if self.get_x() + word_width > right_margin - 5:
                 # Use smaller line height for wrapped lines to reduce gaps
-                self.ln(line_height * 0.8)
+                self.ln(line_height * 0.3)
                 self.set_x(self.l_margin + bullet_indent + 3)
                 word_to_write = word  # No leading space at line start
             
@@ -474,11 +474,11 @@ def generate_pdf(resume: Any, output_path: Optional[str] = None,
     
     pdf = ResumePDF()
     
-    # Adjust margins for compact mode
+    # Adjust margins for compact mode - use wider margins to spread content across full page
     if compact_mode:
-        pdf.set_margins(10, 5, 10)
+        pdf.set_margins(6, 5, 6)
     else:
-        pdf.set_margins(10, 7, 10)
+        pdf.set_margins(6, 7, 6)
     
     pdf.add_page()
     
@@ -539,7 +539,7 @@ def generate_pdf_to_bytes(resume: Any, include_summary: bool = False) -> bytes:
         basics = resume.get('basics', {})
     
     pdf = ResumePDF()
-    pdf.set_margins(8, 5, 8)  # Tighter margins for more content
+    pdf.set_margins(5, 5, 5)  # Minimal margins for maximum content width
     pdf.add_page()
     
     # Add header with name and contact info
@@ -675,11 +675,11 @@ def _generate_pdf_from_dict(resume_dict: dict, output_path: str, compact_mode: b
     """Helper function to generate PDF from a resume dictionary."""
     pdf = ResumePDF()
     
-    # Tighter margins for more content on one page
+    # Tighter margins for more content on one page - use full page width
     if compact_mode:
-        pdf.set_margins(8, 5, 8)
+        pdf.set_margins(5, 5, 5)
     else:
-        pdf.set_margins(8, 5, 8)
+        pdf.set_margins(5, 5, 5)
     
     pdf.add_page()
     

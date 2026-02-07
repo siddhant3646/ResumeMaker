@@ -384,7 +384,8 @@ def tailor_resume_with_nvidia(
     job_description: str,
     nvidia_api_key: str,
     max_retries: int = 3,
-    retry_delay: float = 2.0
+    retry_delay: float = 2.0,
+    progress_callback: Optional[callable] = None
 ) -> tuple[str, str]:
     """
     Tailor resume using Kimi k2.5 model via NVIDIA API with streaming support.
@@ -396,6 +397,7 @@ def tailor_resume_with_nvidia(
         nvidia_api_key: NVIDIA API key for integrate.api.nvidia.com
         max_retries: Maximum number of retry attempts (default: 3)
         retry_delay: Initial delay between retries in seconds (default: 2.0)
+        progress_callback: Optional callback function(progress: float, chars: int, status: str) for UI updates
         
     Returns:
         Tuple of (response_text, model_name_used)
@@ -481,11 +483,16 @@ def tailor_resume_with_nvidia(
                                     delta = data['choices'][0].get('delta', {})
                                     if 'content' in delta:
                                         response_text += delta['content']
+                                        # Update progress every 10 chunks or when content is received
+                                        if chunk_count % 10 == 0 and progress_callback:
+                                            progress_callback(chunk_count, len(response_text), "generating")
                             except json.JSONDecodeError:
                                 continue
                 
                 total_time = time.time() - attempt_start
                 add_log(f"Stream complete: {chunk_count} chunks in {total_time:.1f}s", "success")
+                if progress_callback:
+                    progress_callback(chunk_count, len(response_text), "complete")
             else:
                 # Non-streaming fallback
                 data = response.json()
@@ -882,22 +889,40 @@ def main():
                         add_log("Starting Step 2: Resume Tailoring", "info")
                         add_log(f"Job description length: {len(job_description)} characters", "info")
                         
-                        # Create a status placeholder instead of spinner (allows real-time log updates)
+                        # Create UI elements for progress tracking
                         status_placeholder = st.empty()
-                        status_placeholder.info("✨ Tailoring your resume... Please check sidebar for logs")
+                        progress_bar = st.progress(0.0)
+                        chars_placeholder = st.empty()
+                        status_placeholder.info("🚀 Starting AI tailoring process...")
                         
                         try:
                             # Convert ParsedResume to dict for tailoring
                             add_log("Converting resume to dictionary format...", "info")
                             resume_dict = st.session_state.parsed_resume.model_dump()
                             
-                            # Tailor resume using AI
+                            # Tailor resume using AI with progress tracking
                             add_log("Sending request to AI service...", "processing")
-                            add_log("This may take 30-60 seconds...", "info")
+                            
+                            def update_progress(chunks: int, chars: int, status: str):
+                                """Update progress bar based on character generation."""
+                                # Estimate progress (typical response is ~2000-4000 chars)
+                                estimated_total = 3000
+                                progress = min(0.95, chars / estimated_total)
+                                progress_bar.progress(progress)
+                                
+                                if status == "generating":
+                                    status_placeholder.info(f"✍️ Generating resume content... ({chars} characters)")
+                                    chars_placeholder.text(f"Characters generated: {chars}")
+                                elif status == "complete":
+                                    progress_bar.progress(1.0)
+                                    status_placeholder.success(f"✅ Content generation complete! ({chars} characters)")
+                                    chars_placeholder.empty()
+                            
                             response_text, model_used = tailor_resume_with_nvidia(
                                 resume_dict,
                                 job_description,
-                                api_keys["nvidia"]
+                                api_keys["nvidia"],
+                                progress_callback=update_progress
                             )
                             
                             # Store response
@@ -908,8 +933,10 @@ def main():
                             tailored_resume = parse_tailored_response(response_text)
                             add_log(f"Tailored resume for: {tailored_resume.basics.name}", "success")
                             
-                            # Clear the status message
+                            # Clear UI elements on success
                             status_placeholder.empty()
+                            progress_bar.empty()
+                            chars_placeholder.empty()
                             
                             st.session_state.tailored_resume = tailored_resume
                             st.session_state.step = 3
@@ -919,6 +946,8 @@ def main():
                         except Exception as e:
                             add_log(f"ERROR: {str(e)[:100]}", "error")
                             status_placeholder.error(f"❌ Error tailoring resume: {str(e)}")
+                            progress_bar.empty()
+                            chars_placeholder.empty()
             
             st.markdown("</div>", unsafe_allow_html=True)
     
