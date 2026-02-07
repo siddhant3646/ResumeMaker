@@ -282,19 +282,38 @@ def main():
     if 'job_analysis' not in st.session_state:
         st.session_state.job_analysis = None
     
+    # App Title
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+        <h1 style="
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+            padding: 0.5rem 0;
+        ">ATS Resume Maker</h1>
+        <p style="color: #94a3b8; font-size: 1.1rem; margin-top: 0.5rem;">
+            AI-Powered Resume Optimization for FAANG/MAANG Companies
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Floating Stats
     st.markdown("""
-    <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
-        <div class="floating-stat magnetic-button">
-            <span>⚡</span>
+    <div style="display: flex; justify-content: center; gap: 1.5rem; margin-bottom: 2rem; flex-wrap: wrap;">
+        <div class="floating-stat magnetic-button" style="padding: 1rem 1.5rem; font-size: 1.1rem;">
+            <span style="font-size: 1.3rem;">⚡</span>
             <span><span class="value">STAR</span> Format</span>
         </div>
-        <div class="floating-stat magnetic-button">
-            <span>🎯</span>
+        <div class="floating-stat magnetic-button" style="padding: 1rem 1.5rem; font-size: 1.1rem;">
+            <span style="font-size: 1.3rem;">🎯</span>
             <span><span class="value">ATS</span> Score >90</span>
         </div>
-        <div class="floating-stat magnetic-button">
-            <span>✨</span>
+        <div class="floating-stat magnetic-button" style="padding: 1rem 1.5rem; font-size: 1.1rem;">
+            <span style="font-size: 1.3rem;">✨</span>
             <span><span class="value">AI</span> Enhanced</span>
         </div>
     </div>
