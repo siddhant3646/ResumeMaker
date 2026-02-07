@@ -389,8 +389,8 @@ class ResumePDF(FPDF):
             word_width = self.get_string_width(word_to_write)
             
             if self.get_x() + word_width > right_margin - 5:
-                # Use smaller line height for wrapped lines to reduce gaps
-                self.ln(line_height * 0.3)
+                # Use slightly smaller line height for wrapped lines
+                self.ln(line_height * 0.85)
                 self.set_x(self.l_margin + bullet_indent)
                 word_to_write = word  # No leading space at line start
             

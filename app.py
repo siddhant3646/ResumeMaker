@@ -874,6 +874,8 @@ def main():
             
             col1, col2 = st.columns([1, 4])
             
+            processing_triggered = False
+            
             with col1:
                 if st.button("⬅️ Back", use_container_width=True):
                     st.session_state.step = 1
@@ -884,14 +886,20 @@ def main():
                     if not job_description.strip():
                         st.warning("⚠️ Please enter a job description.")
                     else:
-                        # Clear previous logs and start fresh
-                        clear_logs()
-                        add_log("Starting Step 2: Resume Tailoring", "info")
-                        add_log(f"Job description length: {len(job_description)} characters", "info")
-                        
-                        # Create enhanced UI elements for progress tracking
-                        progress_container = st.container()
-                        with progress_container:
+                        # Set flag to trigger processing after columns
+                        processing_triggered = True
+                        st.session_state.job_description_text = job_description
+            
+            # Show progress animation below both buttons (full width)
+            if processing_triggered or st.session_state.get('processing', False):
+                # Clear previous logs and start fresh
+                clear_logs()
+                add_log("Starting Step 2: Resume Tailoring", "info")
+                add_log(f"Job description length: {len(st.session_state.job_description_text)} characters", "info")
+                
+                # Create enhanced UI elements for progress tracking - spans full width
+                progress_container = st.container()
+                with progress_container:
                             # Animated status with stages
                             status_animation = st.empty()
                             progress_bar = st.progress(0.0)
@@ -930,204 +938,205 @@ def main():
                             """, unsafe_allow_html=True)
                             progress_bar.progress(0.05)
                         
-                        try:
-                            # Convert ParsedResume to dict for tailoring
-                            add_log("Converting resume to dictionary format...", "info")
-                            resume_dict = st.session_state.parsed_resume.model_dump()
-                            
-                            # Update to reading resume stage with fun fact
-                            status_animation.markdown("""
-                            <div style="text-align: center; padding: 25px; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%); border-radius: 15px; margin: 10px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                                <div style="font-size: 45px; margin-bottom: 15px;">
-                                    <span style="display: inline-block; animation: flipPage 1.5s ease-in-out infinite;">📄</span>
-                                </div>
-                                <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 8px;">
-                                    Reading Your Resume
-                                </div>
-                                <div style="color: #a0c4e8; font-size: 14px; margin-bottom: 15px;">
-                                    Extracting your experience and achievements...
-                                </div>
-                                <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-top: 15px; border-left: 3px solid #4fc3f7;">
-                                    <div style="color: #81d4fa; font-size: 12px; font-style: italic;">
-                                        💡 Did you know? 75% of resumes are rejected by ATS before human review
-                                    </div>
-                                </div>
+                try:
+                    # Convert ParsedResume to dict for tailoring
+                    add_log("Converting resume to dictionary format...", "info")
+                    resume_dict = st.session_state.parsed_resume.model_dump()
+                    
+                    # Update to reading resume stage with fun fact
+                    status_animation.markdown("""
+                    <div style="text-align: center; padding: 25px; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%); border-radius: 15px; margin: 10px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                        <div style="font-size: 45px; margin-bottom: 15px;">
+                            <span style="display: inline-block; animation: flipPage 1.5s ease-in-out infinite;">📄</span>
+                        </div>
+                        <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 8px;">
+                            Reading Your Resume
+                        </div>
+                        <div style="color: #a0c4e8; font-size: 14px; margin-bottom: 15px;">
+                            Extracting your experience and achievements...
+                        </div>
+                        <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-top: 15px; border-left: 3px solid #4fc3f7;">
+                            <div style="color: #81d4fa; font-size: 12px; font-style: italic;">
+                                💡 Did you know? 75% of resumes are rejected by ATS before human review
                             </div>
-                            <style>
-                                @keyframes flipPage {
-                                    0%, 100% { transform: rotateY(0deg); }
-                                    50% { transform: rotateY(180deg); }
-                                }
-                            </style>
-                            """, unsafe_allow_html=True)
-                            progress_bar.progress(0.15)
-                            
-                            # Update to analyzing stage with another tip
-                            status_animation.markdown("""
-                            <div style="text-align: center; padding: 25px; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%); border-radius: 15px; margin: 10px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                                <div style="font-size: 45px; margin-bottom: 15px;">
-                                    <span style="display: inline-block; animation: searchZoom 2s ease-in-out infinite;">🔍</span>
-                                </div>
-                                <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 8px;">
-                                    Analyzing Job Description
-                                </div>
-                                <div style="color: #a0c4e8; font-size: 14px; margin-bottom: 15px;">
-                                    Identifying key requirements and keywords...
-                                </div>
-                                <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-top: 15px; border-left: 3px solid #4fc3f7;">
-                                    <div style="color: #81d4fa; font-size: 12px; font-style: italic;">
-                                        💡 Pro tip: Tailored resumes get 3x more interviews than generic ones
-                                    </div>
-                                </div>
+                        </div>
+                    </div>
+                    <style>
+                        @keyframes flipPage {
+                            0%, 100% { transform: rotateY(0deg); }
+                            50% { transform: rotateY(180deg); }
+                        }
+                    </style>
+                    """, unsafe_allow_html=True)
+                    progress_bar.progress(0.15)
+                    
+                    # Update to analyzing stage with another tip
+                    status_animation.markdown("""
+                    <div style="text-align: center; padding: 25px; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%); border-radius: 15px; margin: 10px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                        <div style="font-size: 45px; margin-bottom: 15px;">
+                            <span style="display: inline-block; animation: searchZoom 2s ease-in-out infinite;">🔍</span>
+                        </div>
+                        <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 8px;">
+                            Analyzing Job Description
+                        </div>
+                        <div style="color: #a0c4e8; font-size: 14px; margin-bottom: 15px;">
+                            Identifying key requirements and keywords...
+                        </div>
+                        <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-top: 15px; border-left: 3px solid #4fc3f7;">
+                            <div style="color: #81d4fa; font-size: 12px; font-style: italic;">
+                                💡 Pro tip: Tailored resumes get 3x more interviews than generic ones
                             </div>
-                            <style>
-                                @keyframes searchZoom {
-                                    0%, 100% { transform: scale(1) rotate(0deg); }
-                                    25% { transform: scale(1.1) rotate(-10deg); }
-                                    75% { transform: scale(1.1) rotate(10deg); }
-                                }
-                            </style>
-                            """, unsafe_allow_html=True)
-                            progress_bar.progress(0.25)
+                        </div>
+                    </div>
+                    <style>
+                        @keyframes searchZoom {
+                            0%, 100% { transform: scale(1) rotate(0deg); }
+                            25% { transform: scale(1.1) rotate(-10deg); }
+                            75% { transform: scale(1.1) rotate(10deg); }
+                        }
+                    </style>
+                    """, unsafe_allow_html=True)
+                    progress_bar.progress(0.25)
+                    
+                    # Tailor resume using AI with progress tracking
+                    add_log("Sending request to AI service...", "processing")
+                    
+                    def update_progress(chunks: int, chars: int, status: str):
+                        """Update progress bar based on character generation with animation."""
+                        # Estimate progress (typical response is ~2000-4000 chars)
+                        estimated_total = 3000
+                        base_progress = 0.3  # First 30% is setup
+                        generation_progress = min(0.65, (chars / estimated_total) * 0.65)
+                        progress = base_progress + generation_progress
+                        
+                        progress_bar.progress(progress)
+                        
+                        if status == "generating":
+                            # Animated writing status with rotating tips
+                            animation_icons = ["✍️", "📝", "✨", "💼", "🎯", "🚀"]
+                            tips = [
+                                "💡 Action verbs like 'Architected' and 'Engineered' make stronger impact",
+                                "💡 Quantified achievements get 40% more attention from recruiters",
+                                "💡 ATS systems scan for keywords in the first 1/3 of your resume",
+                                "💡 Skills matching job description increase interview chances by 3x",
+                                "💡 Bullet points starting with numbers catch the eye immediately",
+                                "💡 Keeping resume to 1 page increases readability by 70%"
+                            ]
+                            icon = animation_icons[(chunks // 15) % len(animation_icons)]
+                            tip = tips[(chunks // 30) % len(tips)]
                             
-                            # Tailor resume using AI with progress tracking
-                            add_log("Sending request to AI service...", "processing")
-                            
-                            def update_progress(chunks: int, chars: int, status: str):
-                                """Update progress bar based on character generation with animation."""
-                                # Estimate progress (typical response is ~2000-4000 chars)
-                                estimated_total = 3000
-                                base_progress = 0.3  # First 30% is setup
-                                generation_progress = min(0.65, (chars / estimated_total) * 0.65)
-                                progress = base_progress + generation_progress
-                                
-                                progress_bar.progress(progress)
-                                
-                                if status == "generating":
-                                    # Animated writing status with rotating tips
-                                    animation_icons = ["✍️", "📝", "✨", "💼", "🎯", "🚀"]
-                                    tips = [
-                                        "💡 Action verbs like 'Architected' and 'Engineered' make stronger impact",
-                                        "💡 Quantified achievements get 40% more attention from recruiters",
-                                        "💡 ATS systems scan for keywords in the first 1/3 of your resume",
-                                        "💡 Skills matching job description increase interview chances by 3x",
-                                        "💡 Bullet points starting with numbers catch the eye immediately",
-                                        "💡 Keeping resume to 1 page increases readability by 70%"
-                                    ]
-                                    icon = animation_icons[(chunks // 15) % len(animation_icons)]
-                                    tip = tips[(chunks // 30) % len(tips)]
-                                    
-                                    status_animation.markdown(f"""
-                                    <div style="text-align: center; padding: 25px; background: linear-gradient(135deg, #2d5a87 0%, #4a90c2 50%, #2d5a87 100%); border-radius: 15px; margin: 10px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                                        <div style="font-size: 50px; margin-bottom: 15px;">
-                                            <span style="display: inline-block; animation: magicWrite 1.5s ease-in-out infinite;">{icon}</span>
-                                        </div>
-                                        <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 8px;">
-                                            ✨ Rewriting Your Resume ✨
-                                        </div>
-                                        <div style="color: #a0c4e8; font-size: 14px; margin-bottom: 15px;">
-                                            Crafting tailored content... <span style="color: #4fc3f7; font-weight: bold;">{chars}</span> characters generated
-                                        </div>
-                                        <div style="display: flex; justify-content: center; gap: 8px; margin: 15px 0;">
-                                            <span style="width: 8px; height: 8px; background: #4fc3f7; border-radius: 50%; display: inline-block; animation: pulseDot 1s ease-in-out infinite;"></span>
-                                            <span style="width: 8px; height: 8px; background: #4fc3f7; border-radius: 50%; display: inline-block; animation: pulseDot 1s ease-in-out 0.2s infinite;"></span>
-                                            <span style="width: 8px; height: 8px; background: #4fc3f7; border-radius: 50%; display: inline-block; animation: pulseDot 1s ease-in-out 0.4s infinite;"></span>
-                                        </div>
-                                        <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-top: 15px; border-left: 3px solid #4fc3f7;">
-                                            <div style="color: #81d4fa; font-size: 12px; font-style: italic; animation: fadeTip 3s ease-in-out;">
-                                                {tip}
-                                            </div>
-                                        </div>
-                                        <div style="margin-top: 15px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-                                            <span style="background: rgba(79, 195, 247, 0.2); padding: 5px 10px; border-radius: 15px; color: #81d4fa; font-size: 11px;">🎯 Matching skills</span>
-                                            <span style="background: rgba(79, 195, 247, 0.2); padding: 5px 10px; border-radius: 15px; color: #81d4fa; font-size: 11px;">💡 ATS Optimization</span>
-                                            <span style="background: rgba(79, 195, 247, 0.2); padding: 5px 10px; border-radius: 15px; color: #81d4fa; font-size: 11px;">📊 Highlighting wins</span>
-                                        </div>
-                                    </div>
-                                    <style>
-                                        @keyframes magicWrite {{
-                                            0%, 100% {{ transform: translateY(0) rotate(-5deg) scale(1); }}
-                                            25% {{ transform: translateY(-5px) rotate(5deg) scale(1.1); }}
-                                            50% {{ transform: translateY(0) rotate(-5deg) scale(1); }}
-                                            75% {{ transform: translateY(-3px) rotate(5deg) scale(1.05); }}
-                                        }}
-                                        @keyframes pulseDot {{
-                                            0%, 100% {{ transform: scale(1); opacity: 1; }}
-                                            50% {{ transform: scale(0.5); opacity: 0.5; }}
-                                        }}
-                                        @keyframes fadeTip {{
-                                            0%, 100% {{ opacity: 1; }}
-                                            50% {{ opacity: 0.7; }}
-                                        }}
-                                    </style>
-                                    """, unsafe_allow_html=True)
-                                    
-                                    # Show dynamic details
-                                    details_placeholder.info(f"📊 Generated {chars} characters of tailored content")
-                                    
-                                elif status == "complete":
-                                    progress_bar.progress(1.0)
-                                    status_animation.markdown("""
-                                    <div style="text-align: center; padding: 20px; background: linear-gradient(90deg, #2d7d46 0%, #4caf50 100%); border-radius: 10px; margin: 10px 0;">
-                                        <div style="font-size: 40px; animation: success 0.6s ease-out;">✅</div>
-                                        <div style="color: white; font-size: 18px; font-weight: bold; margin-top: 10px;">
-                                            Resume Tailored Successfully!
-                                        </div>
-                                        <div style="color: #c8e6c9; font-size: 14px; margin-top: 5px;">
-                                            Your optimized resume is ready for download
-                                        </div>
-                                    </div>
-                                    <style>
-                                        @keyframes success {
-                                            0% { transform: scale(0) rotate(0deg); }
-                                            50% { transform: scale(1.2) rotate(180deg); }
-                                            100% { transform: scale(1) rotate(360deg); }
-                                        }
-                                    </style>
-                                    """, unsafe_allow_html=True)
-                                    details_placeholder.empty()
-                            
-                            response_text, model_used = tailor_resume_with_nvidia(
-                                resume_dict,
-                                job_description,
-                                api_keys["nvidia"],
-                                progress_callback=update_progress
-                            )
-                            
-                            # Store response
-                            add_log("Response received, parsing results...", "processing")
-                            st.session_state.tailored_response_text = response_text
-                            
-                            # Parse the tailored response
-                            tailored_resume = parse_tailored_response(response_text)
-                            add_log(f"Tailored resume for: {tailored_resume.basics.name}", "success")
-                            
-                            # Clear UI elements on success
-                            status_animation.empty()
-                            progress_bar.empty()
-                            details_placeholder.empty()
-                            progress_container.empty()
-                            
-                            st.session_state.tailored_resume = tailored_resume
-                            st.session_state.step = 3
-                            add_log("Moving to Step 3 (Download)", "info")
-                            st.rerun()
-                            
-                        except Exception as e:
-                            add_log(f"ERROR: {str(e)[:100]}", "error")
                             status_animation.markdown(f"""
-                            <div style="text-align: center; padding: 20px; background: linear-gradient(90deg, #8b2635 0%, #c0392b 100%); border-radius: 10px; margin: 10px 0;">
-                                <div style="font-size: 40px;">❌</div>
-                                <div style="color: white; font-size: 18px; font-weight: bold; margin-top: 10px;">
-                                    Error Tailoring Resume
+                            <div style="text-align: center; padding: 25px; background: linear-gradient(135deg, #2d5a87 0%, #4a90c2 50%, #2d5a87 100%); border-radius: 15px; margin: 10px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                                <div style="font-size: 50px; margin-bottom: 15px;">
+                                    <span style="display: inline-block; animation: magicWrite 1.5s ease-in-out infinite;">{icon}</span>
                                 </div>
-                                <div style="color: #f5b7b1; font-size: 14px; margin-top: 5px;">
-                                    {str(e)[:100]}
+                                <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 8px;">
+                                    ✨ Rewriting Your Resume ✨
+                                </div>
+                                <div style="color: #a0c4e8; font-size: 14px; margin-bottom: 15px;">
+                                    Crafting tailored content... <span style="color: #4fc3f7; font-weight: bold;">{chars}</span> characters generated
+                                </div>
+                                <div style="display: flex; justify-content: center; gap: 8px; margin: 15px 0;">
+                                    <span style="width: 8px; height: 8px; background: #4fc3f7; border-radius: 50%; display: inline-block; animation: pulseDot 1s ease-in-out infinite;"></span>
+                                    <span style="width: 8px; height: 8px; background: #4fc3f7; border-radius: 50%; display: inline-block; animation: pulseDot 1s ease-in-out 0.2s infinite;"></span>
+                                    <span style="width: 8px; height: 8px; background: #4fc3f7; border-radius: 50%; display: inline-block; animation: pulseDot 1s ease-in-out 0.4s infinite;"></span>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-top: 15px; border-left: 3px solid #4fc3f7;">
+                                    <div style="color: #81d4fa; font-size: 12px; font-style: italic; animation: fadeTip 3s ease-in-out;">
+                                        {tip}
+                                    </div>
+                                </div>
+                                <div style="margin-top: 15px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                                    <span style="background: rgba(79, 195, 247, 0.2); padding: 5px 10px; border-radius: 15px; color: #81d4fa; font-size: 11px;">🎯 Matching skills</span>
+                                    <span style="background: rgba(79, 195, 247, 0.2); padding: 5px 10px; border-radius: 15px; color: #81d4fa; font-size: 11px;">💡 ATS Optimization</span>
+                                    <span style="background: rgba(79, 195, 247, 0.2); padding: 5px 10px; border-radius: 15px; color: #81d4fa; font-size: 11px;">📊 Highlighting wins</span>
                                 </div>
                             </div>
+                            <style>
+                                @keyframes magicWrite {{
+                                    0%, 100% {{ transform: translateY(0) rotate(-5deg) scale(1); }}
+                                    25% {{ transform: translateY(-5px) rotate(5deg) scale(1.1); }}
+                                    50% {{ transform: translateY(0) rotate(-5deg) scale(1); }}
+                                    75% {{ transform: translateY(-3px) rotate(5deg) scale(1.05); }}
+                                }}
+                                @keyframes pulseDot {{
+                                    0%, 100% {{ transform: scale(1); opacity: 1; }}
+                                    50% {{ transform: scale(0.5); opacity: 0.5; }}
+                                }}
+                                @keyframes fadeTip {{
+                                    0%, 100% {{ opacity: 1; }}
+                                    50% {{ opacity: 0.7; }}
+                                }}
+                            </style>
                             """, unsafe_allow_html=True)
-                            progress_bar.empty()
+                            
+                            # Show dynamic details
+                            details_placeholder.info(f"📊 Generated {chars} characters of tailored content")
+                            
+                        elif status == "complete":
+                            progress_bar.progress(1.0)
+                            status_animation.markdown("""
+                            <div style="text-align: center; padding: 20px; background: linear-gradient(90deg, #2d7d46 0%, #4caf50 100%); border-radius: 10px; margin: 10px 0;">
+                                <div style="font-size: 40px; animation: success 0.6s ease-out;">✅</div>
+                                <div style="color: white; font-size: 18px; font-weight: bold; margin-top: 10px;">
+                                    Resume Tailored Successfully!
+                                </div>
+                                <div style="color: #c8e6c9; font-size: 14px; margin-top: 5px;">
+                                    Your optimized resume is ready for download
+                                </div>
+                            </div>
+                            <style>
+                                @keyframes success {
+                                    0% { transform: scale(0) rotate(0deg); }
+                                    50% { transform: scale(1.2) rotate(180deg); }
+                                    100% { transform: scale(1) rotate(360deg); }
+                                }
+                            </style>
+                            """, unsafe_allow_html=True)
                             details_placeholder.empty()
+                    
+                    job_description = st.session_state.job_description_text
+                    response_text, model_used = tailor_resume_with_nvidia(
+                        resume_dict,
+                        job_description,
+                        api_keys["nvidia"],
+                        progress_callback=update_progress
+                    )
+                    
+                    # Store response
+                    add_log("Response received, parsing results...", "processing")
+                    st.session_state.tailored_response_text = response_text
+                    
+                    # Parse the tailored response
+                    tailored_resume = parse_tailored_response(response_text)
+                    add_log(f"Tailored resume for: {tailored_resume.basics.name}", "success")
+                    
+                    # Clear UI elements on success
+                    status_animation.empty()
+                    progress_bar.empty()
+                    details_placeholder.empty()
+                    progress_container.empty()
+                    
+                    st.session_state.tailored_resume = tailored_resume
+                    st.session_state.step = 3
+                    add_log("Moving to Step 3 (Download)", "info")
+                    st.rerun()
+                    
+                except Exception as e:
+                    add_log(f"ERROR: {str(e)[:100]}", "error")
+                    status_animation.markdown(f"""
+                    <div style="text-align: center; padding: 20px; background: linear-gradient(90deg, #8b2635 0%, #c0392b 100%); border-radius: 10px; margin: 10px 0;">
+                        <div style="font-size: 40px;">❌</div>
+                        <div style="color: white; font-size: 18px; font-weight: bold; margin-top: 10px;">
+                            Error Tailoring Resume
+                        </div>
+                        <div style="color: #f5b7b1; font-size: 14px; margin-top: 5px;">
+                            {str(e)[:100]}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    progress_bar.empty()
+                    details_placeholder.empty()
             
             st.markdown("</div>", unsafe_allow_html=True)
     
