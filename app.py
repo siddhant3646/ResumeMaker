@@ -474,7 +474,7 @@ def render_step_2_job_description():
     # Animation container below both buttons
     animation_container = st.container()
     
-    if tailor_clicked and not is_already_processing:
+    if tailor_clicked and not st.session_state.is_processing:
         if not job_description.strip():
             st.warning("⚠️ Please enter a job description.")
         else:
@@ -636,6 +636,9 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         st.error(f"❌ Error during generation: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
+    finally:
+        # Always reset processing state
+        st.session_state.is_processing = False
 
 
 def render_step_3_download():
