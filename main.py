@@ -2,7 +2,7 @@
 """
 Resume Tailor CLI
 
-A CLI tool that scrapes job descriptions, uses Google Gemini to tailor
+A CLI tool that scrapes job descriptions, uses AI to tailor
 resume bullet points, and generates ATS-friendly PDFs.
 """
 
@@ -121,7 +121,7 @@ def apply(
         help="Company name (extracted automatically if not provided)"
     ),
     model: str = typer.Option(
-        "gemma-3-27b-it",
+        "AI's Supermind",
         "--model", "-m",
         help="Google AI model to use"
     ),
@@ -232,6 +232,14 @@ def apply(
             "Company name (for filename)",
             default="Company"
         )
+    
+    # Ensure we have a job description
+    if not job_description:
+        rprint("[bold red]Error:[/bold red] No job description provided.")
+        rprint("\n[yellow]Please provide a job description via:[/yellow]")
+        rprint("  • --jd-file option")
+        rprint("  • Job URL (not 'manual')")
+        raise typer.Exit(code=1)
     
     # Tailor the resume using AI
     rprint(f"\n[cyan]Tailoring resume using {model}...[/cyan]")

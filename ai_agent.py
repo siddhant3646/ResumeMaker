@@ -156,34 +156,6 @@ def calculate_total_experience(experience_list: list) -> str:
         return f"{int(rounded_years)}+ years"
 
 
-def force_experience_in_summary(resume: TailoredResume, correct_experience: str) -> TailoredResume:
-    """
-    Post-process the AI-generated summary to ensure it uses the correct total experience.
-    
-    Args:
-        resume: The TailoredResume object with AI-generated content
-        correct_experience: The correctly calculated experience string (e.g., "4+ years")
-        
-    Returns:
-        TailoredResume with corrected experience value in summary
-    """
-    if not resume.summary:
-        return resume
-    
-    # Pattern to match various YOE formats: "2+ years", "2.5 years", "3 years", "2-3 years", etc.
-    yoe_pattern = r'\b\d+(?:\.\d+)?\+?\s*(?:-\s*\d+\+?)?\s*years?\s+of\s+experience\b'
-    
-    # Replace any YOE pattern with the correct experience
-    resume.summary = re.sub(
-        yoe_pattern,
-        f"{correct_experience} of experience",
-        resume.summary,
-        flags=re.IGNORECASE
-    )
-    
-    return resume
-
-
 # ============================================================================
 # System Prompt
 # ============================================================================
@@ -415,7 +387,7 @@ def tailor_resume(
     master_resume: dict,
     job_description: str,
     api_key: str,
-    model: str = "gemini-2.0-flash"
+    model: str = "AI's Supermind"
 ) -> TailoredResume:
     """
     Tailor a resume for a specific job description using Google GenAI.
@@ -424,7 +396,7 @@ def tailor_resume(
         master_resume: The master resume data (dict matching schema)
         job_description: The job description text
         api_key: Google API key
-        model: Model to use (default: gemini-2.0-flash)
+        model: Model to use (default: AI's Supermind)
         
     Returns:
         TailoredResume object with tailored content
@@ -442,8 +414,8 @@ def tailor_resume(
     # Format the system prompt with total_experience for the 4-step methodology
     formatted_system_prompt = SYSTEM_PROMPT_TEMPLATE.format(total_experience=total_experience)
     
-    # Check if model supports system instructions (Gemini does, Gemma doesn't)
-    supports_system_instruction = 'gemini' in model.lower()
+    # Check if model supports system instructions
+    supports_system_instruction = True
     
     # Build the user prompt - include instructions for models that don't support system_instruction
     if supports_system_instruction:

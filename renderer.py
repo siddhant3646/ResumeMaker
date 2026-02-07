@@ -6,6 +6,7 @@ Works with CLI and Streamlit use cases.
 
 import copy
 import os
+import re
 import unicodedata
 from io import BytesIO
 from pathlib import Path
@@ -182,26 +183,12 @@ class ResumePDF(FPDF):
         self.ln(2)
     
     def add_summary(self, summary: str):
-        """Add professional summary section with plain text formatting."""
-        if not summary:
-            return
-            
-        self.section_header("Professional Summary")
-        
-        # Apply bold formatting to keywords and metrics in summary
-        summary_text = sanitize_unicode_for_pdf(summary)
-        # Replace newlines with spaces to prevent unwanted line breaks
-        summary_text = ' '.join(summary_text.split())
-        if summary_text and not summary_text.endswith(('.', '!', '?')):
-            summary_text += '.'
-        
-        self.set_font("Times", "", 10)
-        self.set_text_color(*BLACK)
-        self.write_bullet_with_bold(summary_text, line_height=5)
-        self.ln(2)
+        """Add professional summary section - DEPRECATED - Never called to save space."""
+        # This function is never called to save space for one-page layout
+        pass
     
     def add_skills(self, skills: Any):
-        """Add skills section."""
+        """Add skills section in compact single-line format."""
         if not skills:
             return
             
@@ -213,30 +200,46 @@ class ResumePDF(FPDF):
         languages = getattr(skills, 'languages_frameworks', None) or skills.get('languages_frameworks', [])
         tools = getattr(skills, 'tools', None) or skills.get('tools', [])
         
+        # Combine all skills into single line
+        all_skills = []
         if languages:
-            self.set_font("Times", "B", 10)
-            self.cell(0, 5, "Languages & Frameworks: ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            self.set_font("Times", "", 10)
-            self.multi_cell(0, 5, sanitize_unicode_for_pdf(", ".join(languages)),
-                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        
+            all_skills.extend(languages)
         if tools:
-            self.set_font("Times", "B", 10)
-            self.cell(0, 5, "Tools & Platforms: ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            self.set_font("Times", "", 10)
-            self.multi_cell(0, 5, sanitize_unicode_for_pdf(", ".join(tools)),
+            all_skills.extend(tools)
+        
+        if all_skills:
+            skills_text = ", ".join(all_skills)
+            self.multi_cell(0, 4, sanitize_unicode_for_pdf(skills_text),
                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
-        self.ln(2)
+        self.ln(1)
     
     def add_experience(self, experiences: list):
-        """Add work experience section."""
+        """Add work experience section with smart bullet management."""
         if not experiences:
             return
+        
+        # Sort experiences by start date (most recent first)
+        def parse_date(date_str):
+            """Parse date string to comparable format."""
+            if not date_str:
+                return ""
+            # Normalize first
+            date_str = normalize_date(date_str)
+            # Try to extract year
+            import re
+            year_match = re.search(r'\d{4}', date_str)
+            if year_match:
+                return year_match.group()
+            return date_str
+        
+        sorted_experiences = sorted(experiences, 
+                                    key=lambda x: parse_date(getattr(x, 'startDate', None) or x.get('startDate', '')),
+                                    reverse=True)
             
         self.section_header("Professional Experience")
         
-        for exp in experiences:
+        for idx, exp in enumerate(sorted_experiences):
             # Company and Role
             self.set_font("Times", "B", 10)
             self.set_text_color(*BLACK)
@@ -253,23 +256,40 @@ class ResumePDF(FPDF):
             start_date = normalize_date(start_date)
             end_date = normalize_date(end_date)
             
-            self.cell(0, 5, sanitize_unicode_for_pdf(role), new_x=XPos.RIGHT, new_y=YPos.LAST)
+            self.cell(0, 4, sanitize_unicode_for_pdf(role), new_x=XPos.RIGHT, new_y=YPos.LAST)
             
             # Date on the right
             date_str = f"{start_date} — {end_date}"
-            self.cell(0, 5, sanitize_unicode_for_pdf(date_str), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.cell(0, 4, sanitize_unicode_for_pdf(date_str), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
             # Company and Location
             self.set_font("Times", "I", 10)
             self.set_text_color(*BLACK)
-            self.cell(0, 5, sanitize_unicode_for_pdf(f"{company} | {location}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            self.ln(1)
+            self.cell(0, 4, sanitize_unicode_for_pdf(f"{company} | {location}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.ln(0.5)
+            
+            # Smart bullet management
+            is_most_recent = (idx == 0)
+            
+            if is_most_recent:
+                # Most recent role: show all bullets (10-12 expected)
+                bullets_to_show = bullets
+            else:
+                # Other roles: show only 1-2 bullets
+                bullets_to_show = bullets[:2] if len(bullets) > 2 else bullets
             
             # Bullets with bold keywords
-            for bullet in bullets:
-                self.write_bullet_with_bold(bullet)
+            for bullet in bullets_to_show:
+                self.write_bullet_with_bold(bullet, line_height=4)
             
-            self.ln(2)
+            # Add note if bullets were truncated
+            if not is_most_recent and len(bullets) > 2:
+                self.set_font("Times", "I", 9)
+                self.set_text_color(100, 100, 100)  # Gray color
+                self.cell(0, 3, f"[+{len(bullets) - 2} more achievements]", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                self.set_text_color(*BLACK)
+            
+            self.ln(1)
     
     def add_education(self, education: list):
         """Add education section."""
@@ -369,13 +389,14 @@ class ResumePDF(FPDF):
             word_width = self.get_string_width(word_to_write)
             
             if self.get_x() + word_width > right_margin - 5:
-                self.ln(line_height)
+                # Use smaller line height for wrapped lines to reduce gaps
+                self.ln(line_height * 0.8)
                 self.set_x(self.l_margin + bullet_indent + 3)
                 word_to_write = word  # No leading space at line start
             
             self.write(line_height, word_to_write)
 
-    def write_bullet_with_bold(self, text: str, line_height: float = 5):
+    def write_bullet_with_bold(self, text: str, line_height: float = 4):
         """Write a bullet point with plain text formatting (no bold)."""
         text = sanitize_unicode_for_pdf(text)
         if not text:
@@ -391,7 +412,7 @@ class ResumePDF(FPDF):
         # Write text without any bold formatting
         self._write_text_segment(text, line_height, bullet_indent, right_margin)
         
-        # End bullet with line break
+        # End bullet with line break - use smaller spacing
         self.ln(line_height)
 
 
@@ -499,13 +520,14 @@ def generate_pdf(resume: Any, output_path: Optional[str] = None,
     return os.path.abspath(output_path)
 
 
-def generate_pdf_to_bytes(resume: Any, include_summary: bool = True) -> bytes:
+def generate_pdf_to_bytes(resume: Any, include_summary: bool = False) -> bytes:
     """
     Generate PDF resume and return as bytes for Streamlit compatibility.
+    NOTE: Summary is NEVER included to save space for 1-page layout.
     
     Args:
         resume: Resume object (TailoredResume or ParsedResume)
-        include_summary: Whether to include the professional summary section
+        include_summary: DEPRECATED - Summary is never included
         
     Returns:
         PDF as bytes
@@ -517,15 +539,13 @@ def generate_pdf_to_bytes(resume: Any, include_summary: bool = True) -> bytes:
         basics = resume.get('basics', {})
     
     pdf = ResumePDF()
+    pdf.set_margins(8, 5, 8)  # Tighter margins for more content
     pdf.add_page()
     
     # Add header with name and contact info
     pdf.add_header_info(basics)
     
-    # Add summary (optional)
-    summary = getattr(resume, 'summary', None) or resume.get('summary', '')
-    if include_summary and summary:
-        pdf.add_summary(summary)
+    # NO SUMMARY SECTION - skipped to save space for 1-page layout
     
     # Add skills
     skills = getattr(resume, 'skills', None) or resume.get('skills')
@@ -561,11 +581,12 @@ def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None,
                                   max_attempts: int = 4) -> str:
     """
     Generate PDF with automatic 1-page constraint.
+    NOTE: Summary is NEVER included (skipped to save space).
     Progressively removes sections if content exceeds 1 page:
-    1. Full resume with summary
-    2. Without summary (compact mode)
-    3. Without projects (compact mode)
-    4. Without achievements (compact mode)
+    1. Full experience (10-12 bullets for recent role)
+    2. Without projects (keep all experience)
+    3. Without achievements (keep essential sections)
+    4. Minimal version (experience + skills + education only)
     
     Args:
         resume: Resume object (TailoredResume or ParsedResume)
@@ -601,11 +622,13 @@ def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None,
         resume_dict = dict(resume)
     
     # Store original values
-    original_summary = resume_dict.get('summary', '')
     original_projects = resume_dict.get('projects', [])
     original_achievements = resume_dict.get('achievements', [])
     
-    # Try 1: Generate with everything
+    # NOTE: Summary is NEVER included to save space
+    resume_dict['summary'] = ''
+    
+    # Try 1: Generate with full experience (10-12 bullets for most recent)
     temp_dict = copy.deepcopy(resume_dict)
     pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=False)
     page_count = get_pdf_page_count(pdf_path)
@@ -613,20 +636,9 @@ def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None,
     if page_count == 1:
         return pdf_path
     
-    # Try 2: Without summary, compact mode
+    # Try 2: Without projects (keep all experience bullets)
     if max_attempts >= 2:
         temp_dict = copy.deepcopy(resume_dict)
-        temp_dict['summary'] = ''
-        pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=True)
-        page_count = get_pdf_page_count(pdf_path)
-        
-        if page_count == 1:
-            return pdf_path
-    
-    # Try 3: Without projects, compact mode
-    if max_attempts >= 3:
-        temp_dict = copy.deepcopy(resume_dict)
-        temp_dict['summary'] = ''
         temp_dict['projects'] = []
         pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=True)
         page_count = get_pdf_page_count(pdf_path)
@@ -634,10 +646,19 @@ def generate_pdf_with_page_check(resume: Any, output_dir: Optional[str] = None,
         if page_count == 1:
             return pdf_path
     
-    # Try 4: Without achievements, compact mode (keep essential: experience + skills + education)
+    # Try 3: Without achievements (keep experience + skills + education + projects if they fit)
+    if max_attempts >= 3:
+        temp_dict = copy.deepcopy(resume_dict)
+        temp_dict['achievements'] = []
+        pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=True)
+        page_count = get_pdf_page_count(pdf_path)
+        
+        if page_count == 1:
+            return pdf_path
+    
+    # Try 4: Minimal version (experience + skills + education only)
     if max_attempts >= 4:
         temp_dict = copy.deepcopy(resume_dict)
-        temp_dict['summary'] = ''
         temp_dict['projects'] = []
         temp_dict['achievements'] = []
         pdf_path = _generate_pdf_from_dict(temp_dict, output_path, compact_mode=True)
@@ -654,11 +675,11 @@ def _generate_pdf_from_dict(resume_dict: dict, output_path: str, compact_mode: b
     """Helper function to generate PDF from a resume dictionary."""
     pdf = ResumePDF()
     
-    # Adjust margins for compact mode
+    # Tighter margins for more content on one page
     if compact_mode:
-        pdf.set_margins(10, 5, 10)
+        pdf.set_margins(8, 5, 8)
     else:
-        pdf.set_margins(10, 7, 10)
+        pdf.set_margins(8, 5, 8)
     
     pdf.add_page()
     
@@ -667,10 +688,7 @@ def _generate_pdf_from_dict(resume_dict: dict, output_path: str, compact_mode: b
     # Add header
     pdf.add_header_info(type('Basics', (), basics) if isinstance(basics, dict) else basics)
     
-    # Add summary if present
-    summary = resume_dict.get('summary', '')
-    if summary:
-        pdf.add_summary(summary)
+    # NO SUMMARY SECTION - skipped to save space
     
     # Add skills - handle both dict format and list format
     skills = resume_dict.get('skills')
@@ -707,12 +725,13 @@ def _generate_pdf_from_dict(resume_dict: dict, output_path: str, compact_mode: b
 def render_and_save_pdf(resume: Any, output_path: Optional[str] = None, 
                         ensure_single_page: bool = True) -> str:
     """
-    Render and save PDF with optional single-page guarantee.
+    Render and save PDF with single-page guarantee.
+    NOTE: Summary is NEVER included to save space.
     
     Args:
         resume: Resume object (TailoredResume or ParsedResume)
         output_path: Output file path (if None, uses generated filename)
-        ensure_single_page: If True, will remove summary to fit on 1 page
+        ensure_single_page: Always True - ensures 1-page layout
     
     Returns:
         Absolute path to the generated PDF
@@ -721,7 +740,7 @@ def render_and_save_pdf(resume: Any, output_path: Optional[str] = None,
         output_dir = os.path.dirname(output_path) if output_path else None
         return generate_pdf_with_page_check(resume, output_dir)
     else:
-        return generate_pdf(resume, output_path, include_summary=True, compact_mode=False)
+        return generate_pdf(resume, output_path, include_summary=False, compact_mode=False)
 
 
 def preview_html(resume: Any, output_path: str) -> str:

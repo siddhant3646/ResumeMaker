@@ -3,8 +3,7 @@
 Resume Tailor - Streamlit Web Application
 
 A secure web application that takes a Resume (PDF or Text) and a Job Description,
-parses the resume into structured JSON using gemma-3-27b-it, then generates a
-tailored ATS-friendly resume using Kimi k2.5 model via NVIDIA API.
+parses the resume into structured JSON, then generates a tailored ATS-friendly resume.
 
 Security Features:
 - API keys are encrypted and stored in the repository
@@ -172,7 +171,7 @@ class ParsedResume(BaseModel):
 
 
 # ============================================================================
-# Resume Parsing - Using Google AI Studio (gemma-3-27b-it)
+# Resume Parsing
 # ============================================================================
 
 PARSING_PROMPT = """Extract structured information from this resume and return as JSON.
@@ -236,18 +235,18 @@ def parse_resume_with_gemma(
     Raises:
         ValueError: If all retry attempts fail
     """
-    add_log("Initializing Google AI (gemma-3-27b-it)...", "processing")
+    add_log("Initializing AI parser...", "processing")
     
     if not GOOGLE_GENAI_AVAILABLE:
-        add_log("ERROR: google-generativeai library not available", "error")
+        add_log("ERROR: AI library not available", "error")
         raise ImportError("google-generativeai library not available")
     
     # Configure the API
-    add_log("Configuring Google AI API...", "info")
+    add_log("Configuring AI API...", "info")
     genai.configure(api_key=api_key)
     
-    # Use gemma-3-27b-it model for parsing (as requested)
-    add_log("Loading gemma-3-27b-it model...", "info")
+    # Load AI model for parsing
+    add_log("Loading AI model...", "info")
     model = genai.GenerativeModel("gemma-3-27b-it")
     
     # Build the prompt
@@ -340,179 +339,44 @@ def parse_resume_with_gemma(
 
 
 # ============================================================================
-# Resume Tailoring - Using NVIDIA Kimi k2.5 API
+# Resume Tailoring
 # ============================================================================
 
-TAILORING_PROMPT = """You are a SENIOR TECHNICAL RECRUITER and EXPERT RESUME WRITER with 15+ years of experience hiring for Fortune 500 companies. You are an expert in ATS systems and what makes senior hiring managers say "Let's interview this person."
+TAILORING_PROMPT = """You are an expert technical resume writer. Rewrite the resume to match the job description for maximum ATS compatibility.
 
----
+## KEY RULES:
+1. **Metrics**: Use diverse metrics (time, scale, counts, reliability) - avoid only percentages
+2. **Power Verbs**: Architected, Engineered, Optimized, Spearheaded, Secured
+3. **Bullet Format**: [Power Verb] + [Achievement] + [Technology] + [Metric]
+4. **EXPERIENCE BULLETS** (CRITICAL):
+   - MOST RECENT role (latest startDate): 10-12 detailed bullets
+   - ALL OTHER roles: 1-2 bullets only
+5. **NO SUMMARY SECTION** - Skip entirely
+6. **Preserve**: Keep ALL dates exactly as provided
+7. **One Page**: Skills (1 line), Education (compact), Projects/Achievements only if space permits
 
-## CRITICAL RULES (FOLLOW EXACTLY)
-
-### RULE 1: DIVERSE METRICS (NOT JUST PERCENTAGES)
-NEVER rely only on percentages. Mix different metric types for credibility.
-
-**AVOID: Percentage-only metrics (looks like guessing)**
-- ❌ BAD: "Improved performance by 40%"
-- ❌ BAD: "Reduced errors by 25%"
-
-**USE DIVERSE METRIC TYPES:**
-
-**Time-Based:**
-- "Reduced P99 latency from 400ms to 280ms"
-- "Cut deployment time from 45 minutes to 8 minutes"
-- "Achieved sub-200ms response times"
-
-**Scale/Volume:**
-- "Processing 2M+ daily transactions"
-- "Serving 50K concurrent users"
-- "Handling 10K requests/second"
-
-**Counts:**
-- "Resolved 80+ user stories and 35 complex defects"
-- "Built 15 new microservices"
-- "Mentored 5 junior developers"
-
-**Quality/Reliability:**
-- "Achieved 99.97% uptime across 15 services"
-- "Maintained zero security incidents for 18 months"
-
-### RULE 2: HIGHLIGHT SECURITY ACHIEVEMENTS PROMINENTLY
-Feature security credentials prominently in summary and achievements.
-
-### RULE 3: PROJECTS = ENGINEERING CHALLENGES
-Focus on engineering challenges: edge deployment, data pipelines, optimization, NOT just ML accuracy.
-
-### RULE 4: POWER VERBS
-- "Contributed to" → "Authored" or "Designed"
-- "Participated in" → "Led" or "Drove"
-- "Helped with" → "Spearheaded" or "Orchestrated"
-- "Worked on" → "Engineered" or "Architected"
-
-**STRONG VERBS:**
-- Architecture: Architected, Designed, Authored, Engineered
-- Optimization: Optimized, Reduced, Slashed, Accelerated
-- Leadership: Spearheaded, Championed, Pioneered, Directed
-- Security: Hardened, Secured, Remediated, Fortified
-
-### RULE 5: EXPERIENCE BULLETS
-Start each bullet directly with a strong action verb. NO category headers.
-
-**CORRECT FORMAT:**
-"[Power Verb] + [specific achievement] + [technology used] + [quantified result]"
-
----
-
-## OUTPUT REQUIREMENTS
-
-### Professional Summary (3 Sentences)
-1. Years of experience + core tech stack matching JD
-2. Biggest SPECIFIC achievement (with precise metrics)
-3. Key differentiator (security expertise, mentorship, system design)
-
-### Skills (MUST be an object with two keys)
+## OUTPUT STRUCTURE (JSON ONLY):
 ```json
-"skills": {{
-  "languages_frameworks": ["Skill1", "Skill2"],
-  "tools": ["Tool1", "Tool2"]
-}}
+{
+  "basics": {"name": "", "email": "", "phone": "", "location": "", "links": []},
+  "education": [{"institution": "", "area": "", "studyType": "", "startDate": "", "endDate": "", "location": ""}],
+  "experience": [{"company": "", "location": "", "role": "", "startDate": "", "endDate": "", "bullets": []}],
+  "skills": {"languages_frameworks": [], "tools": []},
+  "projects": [{"name": "", "techStack": "", "description": ""}],
+  "achievements": []
+}
 ```
 
-### Experience (8-10 bullets per role - FIT ON 1 PAGE)
-**CRITICAL: Must fit on exactly 1 page.**
-
-**CRITICAL: Preserve startDate and endDate EXACTLY as in input.**
-
-Each bullet must include:
-1. Start with POWER VERB
-2. SPECIFIC metric (latency, throughput, error rate)
-3. Technology and method used
-4. Absolute number + percentage where applicable
-
-### Projects (1-2 bullets each)
-Focus on engineering challenges, not just model accuracy.
-
-### Achievements (3 items only)
-- Security achievements FIRST
-- Best Performer / Awards  
-- Leadership roles
-
----
-
-## 1-PAGE CONSTRAINT
-**The resume MUST fit on exactly 1 page. NO spillover to page 2.**
-
----
-
-## Input Master Resume (JSON):
-
+## INPUT:
+**Resume:**
 ```json
 {master_resume_json}
 ```
 
-## Job Description:
-
+**Job Description:**
 {job_description}
 
----
-
-## Output Format:
-Return a JSON object with this EXACT structure:
-
-```json
-{
-  "basics": {
-    "name": "Full Name",
-    "email": "email@example.com",
-    "phone": "+1-xxx-xxx-xxxx",
-    "location": "City, Country",
-    "links": ["https://linkedin.com/in/...", "https://github.com/..."]
-  },
-  "summary": "Professional summary paragraph (3 sentences)",
-  "education": [
-    {
-      "institution": "University Name",
-      "area": "Field of Study",
-      "studyType": "Degree",
-      "startDate": "Month Year",
-      "endDate": "Month Year or Present",
-      "location": "City, Country"
-    }
-  ],
-  "experience": [
-    {
-      "company": "Company Name",
-      "location": "City, Country",
-      "role": "Job Title",
-      "startDate": "Month Year",
-      "endDate": "Month Year or Present",
-      "bullets": [
-        "Power verb + specific achievement + technology + quantified result",
-        "Another achievement bullet with metrics"
-      ]
-    }
-  ],
-  "skills": {
-    "languages_frameworks": ["Skill1", "Skill2"],
-    "tools": ["Tool1", "Tool2"]
-  },
-  "projects": [
-    {
-      "name": "Project Name",
-      "techStack": "Technologies used (comma separated)",
-      "description": "Brief description"
-    }
-  ],
-  "achievements": ["Achievement 1", "Achievement 2", "Achievement 3"]
-}
-```
-
-**CRITICAL RULES:**
-1. Experience MUST be an array of OBJECTS (not strings)
-2. Each experience object MUST have: company, location, role, startDate, endDate, bullets
-3. Bullets must be an array of strings
-4. Preserve dates from input EXACTLY as they appear
-5. Return ONLY valid JSON, no markdown code blocks, no explanations."""
+Return ONLY valid JSON. No markdown."""
 
 
 def tailor_resume_with_nvidia(
@@ -523,8 +387,8 @@ def tailor_resume_with_nvidia(
     retry_delay: float = 2.0
 ) -> tuple[str, str]:
     """
-    Tailor resume using Kimi k2.5 model via NVIDIA API.
-    Includes retry logic for handling transient failures and rate limits.
+    Tailor resume using Kimi k2.5 model via NVIDIA API with streaming support.
+    Includes detailed timeout logging and retry logic.
     
     Args:
         master_resume: The parsed resume as a dictionary
@@ -539,64 +403,126 @@ def tailor_resume_with_nvidia(
     Raises:
         ValueError: If all retry attempts fail
     """
-    add_log("Initializing NVIDIA API (Kimi k2.5)...", "processing")
+    import time
+    start_time = time.time()
     
-    # NVIDIA API endpoint for Kimi k2.5
+    add_log("Initializing AI tailor...", "processing")
+    
+    # API endpoint
     invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
-    stream = False  # Non-streaming for easier JSON parsing
+    stream = True  # Enable streaming for faster perceived response
     
     # Build the prompt
     add_log("Building tailoring prompt...", "info")
-    master_resume_json_str = json.dumps(master_resume, indent=2)
+    master_resume_json_str = json.dumps(master_resume, separators=(',', ':'))  # Compact JSON
     prompt = TAILORING_PROMPT.replace("{master_resume_json}", master_resume_json_str)
     prompt = prompt.replace("{job_description}", job_description)
-    add_log(f"Prompt size: {len(prompt)} characters", "info")
+    prompt_size = len(prompt)
+    add_log(f"Prompt size: {prompt_size} characters (~{prompt_size // 4} tokens)", "info")
     
     headers = {
         "Authorization": f"Bearer {nvidia_api_key}",
-        "Accept": "application/json",
+        "Accept": "text/event-stream" if stream else "application/json",
         "Content-Type": "application/json"
     }
     
     payload = {
         "model": "moonshotai/kimi-k2.5",
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 16384,
-        "temperature": 1.00,
-        "top_p": 1.00,
-        "stream": stream,
-        "chat_template_kwargs": {"thinking": True}
+        "max_tokens": 4096,
+        "temperature": 0.3,
+        "top_p": 0.9,
+        "stream": stream
     }
     
     last_error = None
     
     for attempt in range(max_retries):
+        attempt_start = time.time()
         try:
-            add_log(f"Attempt {attempt + 1}/{max_retries}: Sending request to NVIDIA API...", "processing")
-            add_log("This may take 30-60 seconds...", "info")
+            add_log(f"Attempt {attempt + 1}/{max_retries}: Connecting to AI service...", "processing")
+            add_log("Streaming mode enabled for faster response...", "info")
             
-            response = requests.post(invoke_url, headers=headers, json=payload, timeout=120)
+            # Track connection time
+            conn_start = time.time()
+            response = requests.post(invoke_url, headers=headers, json=payload, timeout=180, stream=stream)
+            conn_time = time.time() - conn_start
+            add_log(f"Connected in {conn_time:.1f}s", "success")
+            
             response.raise_for_status()
             
-            add_log("Response received from NVIDIA API", "success")
-            data = response.json()
-            
-            if 'choices' not in data or len(data['choices']) == 0:
-                raise ValueError("Empty response from NVIDIA API")
-            
-            response_text = data['choices'][0]['message']['content']
+            if stream:
+                # Process streaming response
+                add_log("Receiving streamed response...", "processing")
+                response_text = ""
+                chunk_count = 0
+                last_log_time = time.time()
+                
+                for line in response.iter_lines():
+                    if line:
+                        chunk_count += 1
+                        line_str = line.decode('utf-8')
+                        
+                        # Log progress every 5 seconds
+                        current_time = time.time()
+                        if current_time - last_log_time > 5:
+                            elapsed = current_time - attempt_start
+                            add_log(f"Receiving... {chunk_count} chunks, {elapsed:.0f}s elapsed", "info")
+                            last_log_time = current_time
+                        
+                        # Parse SSE format
+                        if line_str.startswith('data: '):
+                            data_str = line_str[6:]
+                            if data_str == '[DONE]':
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                if 'choices' in data and len(data['choices']) > 0:
+                                    delta = data['choices'][0].get('delta', {})
+                                    if 'content' in delta:
+                                        response_text += delta['content']
+                            except json.JSONDecodeError:
+                                continue
+                
+                total_time = time.time() - attempt_start
+                add_log(f"Stream complete: {chunk_count} chunks in {total_time:.1f}s", "success")
+            else:
+                # Non-streaming fallback
+                data = response.json()
+                
+                if 'choices' not in data or len(data['choices']) == 0:
+                    raise ValueError("Empty response from AI API")
+                
+                response_text = data['choices'][0]['message']['content']
+                total_time = time.time() - attempt_start
+                add_log(f"Response received in {total_time:.1f}s", "success")
             
             if not response_text:
                 raise ValueError("Empty response from tailoring API")
             
-            add_log(f"Tailored resume generated: {len(response_text)} characters", "success")
+            final_time = time.time() - start_time
+            add_log(f"Tailored resume: {len(response_text)} chars (Total: {final_time:.1f}s)", "success")
             
-            # Success! Return the response text and model name
+            # Success! Return the response text
             if attempt > 0:
-                add_log(f"Successfully tailored after {attempt + 1} attempts", "success")
-            return response_text, "kimi-k2.5-nvidia"
+                add_log(f"Success after {attempt + 1} attempts", "success")
+            return response_text, "AI"
             
+        except requests.exceptions.Timeout as e:
+            elapsed = time.time() - attempt_start
+            last_error = e
+            add_log(f"TIMEOUT after {elapsed:.1f}s", "error")
+            
+            if attempt < max_retries - 1:
+                current_delay = retry_delay * (2 ** attempt)
+                add_log(f"Retrying in {current_delay:.0f}s...", "warning")
+                time.sleep(current_delay)
+            else:
+                add_log(f"All {max_retries} attempts timed out", "error")
+                break
+                
         except requests.exceptions.RequestException as e:
+            elapsed = time.time() - attempt_start
             last_error = e
             error_str = str(e).lower()
             
@@ -604,30 +530,30 @@ def tailor_resume_with_nvidia(
             is_rate_limit = any(x in error_str for x in ['429', 'rate limit', 'too many requests'])
             
             if attempt < max_retries - 1:
-                # Calculate exponential backoff delay
                 current_delay = retry_delay * (2 ** attempt)
                 if is_rate_limit:
                     current_delay *= 2
-                    add_log(f"Rate limit hit. Waiting {current_delay:.1f}s...", "warning")
+                    add_log(f"Rate limit hit after {elapsed:.1f}s. Wait {current_delay:.0f}s...", "warning")
                 else:
-                    add_log(f"Attempt {attempt + 1} failed: {str(e)[:80]}...", "warning")
+                    add_log(f"Error after {elapsed:.1f}s: {str(e)[:60]}...", "warning")
                 time.sleep(current_delay)
             else:
-                # All retries exhausted
                 add_log(f"All {max_retries} attempts failed", "error")
                 break
         except Exception as e:
+            elapsed = time.time() - attempt_start
             last_error = e
             if attempt < max_retries - 1:
                 current_delay = retry_delay * (2 ** attempt)
-                add_log(f"Attempt {attempt + 1} failed: {str(e)[:80]}...", "warning")
+                add_log(f"Error after {elapsed:.1f}s: {str(e)[:60]}...", "warning")
                 time.sleep(current_delay)
             else:
                 add_log(f"All {max_retries} attempts failed", "error")
                 break
     
     # All retries failed
-    raise ValueError(f"Failed to tailor resume after {max_retries} attempts. Last error: {last_error}")
+    total_elapsed = time.time() - start_time
+    raise ValueError(f"Failed after {max_retries} attempts ({total_elapsed:.1f}s). Last error: {last_error}")
 
 
 def parse_tailored_response(response_text: str) -> ParsedResume:
@@ -724,6 +650,8 @@ def init_session_state():
         st.session_state.logs = []
     if 'is_processing' not in st.session_state:
         st.session_state.is_processing = False
+    if 'model_used' not in st.session_state:
+        st.session_state.model_used = None
 
 
 def add_log(message: str, log_type: str = "info"):
@@ -852,7 +780,7 @@ def main():
         with st.container():
             st.markdown("<div class='step-container'>", unsafe_allow_html=True)
             st.subheader("📄 Upload Your Resume")
-            st.write("Upload your resume in PDF format. We'll extract the text and parse it into a structured format using gemma-3-27b-it.")
+            st.write("Upload your resume in PDF format. We'll extract the text and parse it into a structured format.")
             
             uploaded_file = st.file_uploader(
                 "Choose a PDF file",
@@ -879,9 +807,9 @@ def main():
                             add_log("ERROR: No text found in PDF", "error")
                             st.error("❌ Could not extract text from PDF. Please ensure it's a text-based PDF.")
                         else:
-                            # Parse resume with Gemma 3 27B
-                            with st.spinner("🤖 Parsing resume with gemma-3-27b-it..."):
-                                add_log("Starting AI parsing with gemma-3-27b-it...", "processing")
+                            # Parse resume with AI
+                            with st.spinner("🤖 Parsing resume with AI..."):
+                                add_log("Starting AI parsing...", "processing")
                                 parsed_resume = parse_resume_with_gemma(
                                     extracted_text,
                                     api_keys["google"]
@@ -941,38 +869,43 @@ def main():
                         add_log("Starting Step 2: Resume Tailoring", "info")
                         add_log(f"Job description length: {len(job_description)} characters", "info")
                         
-                        with st.spinner("✨ Tailoring your resume with Kimi k2.5 (NVIDIA)..."):
-                            try:
-                                # Convert ParsedResume to dict for tailoring
-                                add_log("Converting resume to dictionary format...", "info")
-                                resume_dict = st.session_state.parsed_resume.model_dump()
-                                
-                                # Tailor resume using NVIDIA Kimi k2.5
-                                add_log("Sending request to NVIDIA API (Kimi k2.5)...", "processing")
-                                response_text, model_used = tailor_resume_with_nvidia(
-                                    resume_dict,
-                                    job_description,
-                                    api_keys["nvidia"]
-                                )
-                                
-                                # Store response
-                                add_log("Response received, parsing results...", "processing")
-                                st.session_state.tailored_response_text = response_text
-                                st.session_state.model_used = model_used
-                                
-                                # Parse the tailored response
-                                tailored_resume = parse_tailored_response(response_text)
-                                add_log(f"Tailored resume for: {tailored_resume.basics.name}", "success")
-                                add_log(f"Summary length: {len(tailored_resume.summary)} characters", "info")
-                                
-                                st.session_state.tailored_resume = tailored_resume
-                                st.session_state.step = 3
-                                add_log("Moving to Step 3 (Download)", "info")
-                                st.rerun()
-                                
-                            except Exception as e:
-                                add_log(f"ERROR: {str(e)[:100]}", "error")
-                                st.error(f"❌ Error tailoring resume: {str(e)}")
+                        # Create a status placeholder instead of spinner (allows real-time log updates)
+                        status_placeholder = st.empty()
+                        status_placeholder.info("✨ Tailoring your resume... Please check sidebar for logs")
+                        
+                        try:
+                            # Convert ParsedResume to dict for tailoring
+                            add_log("Converting resume to dictionary format...", "info")
+                            resume_dict = st.session_state.parsed_resume.model_dump()
+                            
+                            # Tailor resume using AI
+                            add_log("Sending request to AI service...", "processing")
+                            add_log("This may take 30-60 seconds...", "info")
+                            response_text, model_used = tailor_resume_with_nvidia(
+                                resume_dict,
+                                job_description,
+                                api_keys["nvidia"]
+                            )
+                            
+                            # Store response
+                            add_log("Response received, parsing results...", "processing")
+                            st.session_state.tailored_response_text = response_text
+                            
+                            # Parse the tailored response
+                            tailored_resume = parse_tailored_response(response_text)
+                            add_log(f"Tailored resume for: {tailored_resume.basics.name}", "success")
+                            
+                            # Clear the status message
+                            status_placeholder.empty()
+                            
+                            st.session_state.tailored_resume = tailored_resume
+                            st.session_state.step = 3
+                            add_log("Moving to Step 3 (Download)", "info")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            add_log(f"ERROR: {str(e)[:100]}", "error")
+                            status_placeholder.error(f"❌ Error tailoring resume: {str(e)}")
             
             st.markdown("</div>", unsafe_allow_html=True)
     
@@ -983,7 +916,7 @@ def main():
         if tailored_resume:
             # Success message
             st.markdown("<div class='success-box'>", unsafe_allow_html=True)
-            st.success(f"✅ Resume tailored successfully with {st.session_state.model_used}!")
+            st.success("✅ Resume tailored successfully!")
             st.markdown("</div>", unsafe_allow_html=True)
             
             # Preview tailored resume
@@ -996,17 +929,18 @@ def main():
                 
                 st.divider()
                 
-                if tailored_resume.summary:
-                    st.write("**Professional Summary**")
-                    st.write(tailored_resume.summary)
-                    st.divider()
+                # No summary section - removed to save space
                 
                 if tailored_resume.skills:
                     st.write("**Skills**")
+                    # Combine all skills into single line
+                    all_skills = []
                     if tailored_resume.skills.languages_frameworks:
-                        st.write(f"Languages & Frameworks: {', '.join(tailored_resume.skills.languages_frameworks)}")
+                        all_skills.extend(tailored_resume.skills.languages_frameworks)
                     if tailored_resume.skills.tools:
-                        st.write(f"Tools: {', '.join(tailored_resume.skills.tools)}")
+                        all_skills.extend(tailored_resume.skills.tools)
+                    if all_skills:
+                        st.write(f"{', '.join(all_skills)}")
                     st.divider()
                 
                 if tailored_resume.experience:
@@ -1020,7 +954,7 @@ def main():
             
             # Generate PDF
             try:
-                pdf_bytes = generate_pdf_to_bytes(tailored_resume)
+                pdf_bytes = generate_pdf_to_bytes(tailored_resume, include_summary=False)
                 
                 # Download button
                 filename = sanitize_filename(f"{tailored_resume.basics.name}_Resume.pdf")
@@ -1042,6 +976,7 @@ def main():
                     st.session_state.parsed_resume = None
                     st.session_state.tailored_resume = None
                     st.session_state.tailored_response_text = ""
+                    st.session_state.model_used = None
                     st.session_state.step = 1
                     st.rerun()
                     
