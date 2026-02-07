@@ -467,7 +467,7 @@ def render_step_2_job_description():
 
 
 def process_resume_tailoring(job_description: str, config: GenerationConfig):
-    """Process resume tailoring with full animation pipeline"""
+    """Process resume tailoring with full animation pipeline and regeneration loop"""
     api_keys = get_api_keys()
     
     if not api_keys["gemma"] or not api_keys["nvidia"]:
@@ -477,6 +477,9 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
     # Create placeholders for dynamic updates
     status_placeholder = st.empty()
     progress_bar = st.progress(0.05)
+    info_placeholder = st.empty()
+    
+    MAX_ATTEMPTS = 3
     
     # Stage 1: Initializing
     status_placeholder.markdown(
@@ -501,69 +504,96 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         resume = st.session_state.parsed_resume
         time.sleep(0.5)
         
-        # Stage 3: Analyzing JD
-        status_placeholder.markdown(
-            animation_manager.get_stage_html('analyzing_jd'),
-            unsafe_allow_html=True
-        )
-        progress_bar.progress(0.25)
+        # Regeneration loop
+        best_tailored = None
+        best_score = 0
         
-        # Generate tailored resume (this runs the full pipeline)
-        tailored, job_analysis = content_gen.generate_tailored_resume(
-            resume, job_description, config
-        )
-        st.session_state.job_analysis = job_analysis
-        st.session_state.tailored_resume = tailored
-        
-        # Show ATS score
-        if tailored.ats_score:
-            progress_bar.progress(0.60)
-            status_placeholder.markdown(
-                animation_manager.get_ats_score_card(
-                    tailored.ats_score.overall,
-                    {
-                        'star_compliance': tailored.ats_score.star_compliance,
-                        'quantification': tailored.ats_score.quantification,
-                        'keyword_match': tailored.ats_score.keyword_match,
-                        'action_verbs': tailored.ats_score.action_verb_strength
-                    }
-                ),
-                unsafe_allow_html=True
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            # Stage 3: Analyzing/Generating
+            if attempt == 1:
+                status_placeholder.markdown(
+                    animation_manager.get_stage_html('analyzing_jd'),
+                    unsafe_allow_html=True
+                )
+            else:
+                status_placeholder.markdown(
+                    animation_manager.get_stage_html('generating', attempt=attempt),
+                    unsafe_allow_html=True
+                )
+                info_placeholder.info(f"🔄 Attempt {attempt}/{MAX_ATTEMPTS} - Optimizing to reach target ATS score of {config.target_ats_score}...")
+            
+            progress_bar.progress(0.25 + (attempt - 1) * 0.2)
+            
+            # Generate tailored resume
+            tailored, job_analysis = content_gen.generate_tailored_resume(
+                resume, job_description, config
             )
             
-            # Check if meets target
-            if tailored.ats_score.overall >= config.target_ats_score:
-                # Success!
+            # Track best result
+            current_score = tailored.ats_score.overall if tailored.ats_score else 0
+            if current_score > best_score:
+                best_score = current_score
+                best_tailored = tailored
+                st.session_state.job_analysis = job_analysis
+                st.session_state.tailored_resume = tailored
+            
+            # Show ATS score
+            if tailored.ats_score:
+                progress_bar.progress(0.4 + attempt * 0.15)
                 status_placeholder.markdown(
-                    animation_manager.get_stage_html('complete'),
+                    animation_manager.get_ats_score_card(
+                        tailored.ats_score.overall,
+                        {
+                            'star_compliance': tailored.ats_score.star_compliance,
+                            'quantification': tailored.ats_score.quantification,
+                            'keyword_match': tailored.ats_score.keyword_match,
+                            'action_verbs': tailored.ats_score.action_verb_strength
+                        }
+                    ),
                     unsafe_allow_html=True
                 )
-                progress_bar.progress(1.0)
                 
-                # Show fabrication notice if applicable
-                if tailored.fabrication_notes:
-                    with st.expander("ℹ️ Content Enhancement Details"):
-                        st.write("The following enhancements were made:")
-                        for note in tailored.fabrication_notes:
-                            st.write(f"- {note}")
+                # Check if meets target
+                if tailored.ats_score.overall >= config.target_ats_score:
+                    # Success!
+                    info_placeholder.empty()
+                    status_placeholder.markdown(
+                        animation_manager.get_stage_html('complete'),
+                        unsafe_allow_html=True
+                    )
+                    progress_bar.progress(1.0)
+                    
+                    # Show fabrication notice if applicable
+                    if tailored.fabrication_notes:
+                        with st.expander("ℹ️ Content Enhancement Details"):
+                            st.write("The following enhancements were made:")
+                            for note in tailored.fabrication_notes:
+                                st.write(f"- {note}")
+                    
+                    time.sleep(1.5)
+                    st.session_state.step = 3
+                    st.rerun()
+                    return
                 
-                time.sleep(1.5)
-                st.session_state.step = 3
-                st.rerun()
-            else:
-                # Need regeneration - show current score and continue improving
-                st.warning(f"Current ATS score: {tailored.ats_score.overall}/100. Optimizing further...")
-                
-                # In a real implementation, we would continue with regeneration loop
-                # For now, show what we have
-                status_placeholder.markdown(
-                    animation_manager.get_stage_html('complete'),
-                    unsafe_allow_html=True
-                )
-                progress_bar.progress(1.0)
-                time.sleep(1)
-                st.session_state.step = 3
-                st.rerun()
+                # If not last attempt, wait and try again
+                if attempt < MAX_ATTEMPTS:
+                    time.sleep(1)
+        
+        # If we've exhausted all attempts, use best result
+        info_placeholder.warning(
+            f"⚠️ Reached maximum attempts. Best ATS score achieved: {best_score}/100 "
+            f"(Target: {config.target_ats_score}). Proceeding with best result."
+        )
+        st.session_state.tailored_resume = best_tailored
+        
+        status_placeholder.markdown(
+            animation_manager.get_stage_html('complete'),
+            unsafe_allow_html=True
+        )
+        progress_bar.progress(1.0)
+        time.sleep(2)
+        st.session_state.step = 3
+        st.rerun()
         
     except Exception as e:
         st.error(f"❌ Error during generation: {str(e)}")
