@@ -336,10 +336,18 @@ Return a JSON array of improved bullets:
         
         # Try KimiK2.5 first
         try:
-            return self._call_kimi_k2_5(prompt)
+            result = self._call_kimi_k2_5(prompt)
+            print(f"DEBUG: KimiK2.5 returned {len(result)} improved bullets")
+            return result
         except Exception as e:
             print(f"KimiK2.5 failed: {e}, trying StepFun fallback...")
-            return self._call_stepfun_flash(prompt)
+            try:
+                result = self._call_stepfun_flash(prompt)
+                print(f"DEBUG: StepFun returned {len(result)} improved bullets")
+                return result
+            except Exception as e2:
+                print(f"Both models failed: {e2}")
+                return []
     
     def _call_kimi_k2_5(self, prompt: str) -> List[str]:
         """Call KimiK2.5 via NVIDIA API"""
@@ -381,6 +389,7 @@ Return a JSON array of improved bullets:
     
     def _call_stepfun_flash(self, prompt: str) -> List[str]:
         """Call StepFun Flash via OpenAI Client"""
+        import json
         try:
             from openai import OpenAI
             
@@ -396,16 +405,21 @@ Return a JSON array of improved bullets:
                 temperature=0.7
             )
             
-            content = response.choices[0].message.content
+            content = response.choices[0].message.content if response.choices else ""
             
             # Parse JSON from response
             import re
-            json_match = re.search(r'\{[\s\S]*\}', content)
-            if json_match:
-                data = json.loads(json_match.group())
-                return data.get("improved_bullets", [])
-            
-            return []
+            if content:
+                json_match = re.search(r'\{[\s\S]*\}', content)
+                if json_match:
+                    data = json.loads(json_match.group())
+                    return data.get("improved_bullets", [])
+                else:
+                    print(f"DEBUG: No JSON found in StepFun response: {content[:200]}...")
+                    return []
+            else:
+                print("DEBUG: No content in StepFun response")
+                return []
             
         except ImportError:
             # Fallback if OpenAI not available
@@ -435,11 +449,16 @@ Return a JSON array of improved bullets:
         bullet_idx = 0
         weak_set = set(b.lower().strip() for b in ats_feedback.weak_bullets)
         
+        # Debug: Print what we're working with
+        print(f"DEBUG: Weak bullets to replace: {ats_feedback.weak_bullets[:3]}")
+        print(f"DEBUG: Improved bullets available: {improved_bullets[:3]}")
+        
         for exp in improved.experience:
             new_bullets = []
             for bullet in exp.bullets:
                 if bullet.lower().strip() in weak_set and bullet_idx < len(improved_bullets):
                     new_bullets.append(improved_bullets[bullet_idx])
+                    print(f"DEBUG: Replaced bullet: {bullet[:50]}... -> {improved_bullets[bullet_idx][:50]}...")
                     bullet_idx += 1
                 else:
                     new_bullets.append(bullet)
