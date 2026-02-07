@@ -365,9 +365,10 @@ def render_step_1_upload():
     
     # Upload area with modern styling
     uploaded_file = st.file_uploader(
-        "",
+        "Upload Resume PDF",
         type=['pdf'],
-        help="Upload your complete resume in PDF format"
+        help="Upload your complete resume in PDF format",
+        label_visibility="collapsed"
     )
     
     st.markdown('</div>', unsafe_allow_html=True)  # Close bento-grid

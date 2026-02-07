@@ -464,6 +464,15 @@ def get_modern_css() -> str:
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
     
+    /* ===== MAIN CONTENT Z-INDEX FIX ===== */
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"],
+    .main .block-container,
+    .stApp > div {{
+        position: relative;
+        z-index: 1;
+    }}
+    
     /* ===== STREAMLIT OVERRIDES ===== */
     .stButton > button {{
         background: {theme.gradient_button} !important;
