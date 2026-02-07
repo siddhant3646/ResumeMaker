@@ -121,7 +121,7 @@ class ResumePDF(FPDF):
     
     def __init__(self):
         super().__init__()
-        self.set_auto_page_break(auto=True, margin=15)
+        self.set_auto_page_break(auto=True, margin=10)
     
     def section_header(self, title: str):
         """Draw a section header with underline."""
@@ -280,7 +280,7 @@ class ResumePDF(FPDF):
             
             # Bullets with bold keywords
             for bullet in bullets_to_show:
-                self.write_bullet_with_bold(bullet, line_height=4)
+                self.write_bullet_with_bold(bullet, line_height=4.8)
             
             # Add note if bullets were truncated
             if not is_most_recent and len(bullets) > 2:
@@ -289,7 +289,7 @@ class ResumePDF(FPDF):
                 self.cell(0, 3, f"[+{len(bullets) - 2} more achievements]", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 self.set_text_color(*BLACK)
             
-            self.ln(1)
+            self.ln(1.5)
     
     def add_education(self, education: list):
         """Add education section."""
@@ -359,8 +359,8 @@ class ResumePDF(FPDF):
             self.set_font("Times", "", 10)
             self.set_text_color(*BLACK)
             self.cell(4, 5, " ")  # Indent
-            self.write_bullet_with_bold(desc, line_height=5)
-            self.ln(1)  # Space after project
+            self.write_bullet_with_bold(desc, line_height=4.8)
+            self.ln(1.5)  # Space after project
     
     def add_achievements(self, achievements: list):
         """Add achievements section."""
@@ -370,9 +370,9 @@ class ResumePDF(FPDF):
         self.section_header("Achievements")
         
         for achievement in achievements:
-            self.write_bullet_with_bold(achievement)
+            self.write_bullet_with_bold(achievement, line_height=4.8)
         
-        self.ln(2)
+        self.ln(1.5)
     
     def _write_text_segment(self, text: str, line_height: float, bullet_indent: float, right_margin: float):
         """Write a text segment with proper word wrapping and spacing preservation."""
@@ -391,7 +391,7 @@ class ResumePDF(FPDF):
             if self.get_x() + word_width > right_margin - 5:
                 # Use smaller line height for wrapped lines to reduce gaps
                 self.ln(line_height * 0.3)
-                self.set_x(self.l_margin + bullet_indent + 3)
+                self.set_x(self.l_margin + bullet_indent)
                 word_to_write = word  # No leading space at line start
             
             self.write(line_height, word_to_write)
@@ -474,11 +474,11 @@ def generate_pdf(resume: Any, output_path: Optional[str] = None,
     
     pdf = ResumePDF()
     
-    # Adjust margins for compact mode - use wider margins to spread content across full page
+    # Adjust margins for compact mode - use minimal margins to spread content across full page
     if compact_mode:
-        pdf.set_margins(6, 5, 6)
+        pdf.set_margins(4, 5, 4)
     else:
-        pdf.set_margins(6, 7, 6)
+        pdf.set_margins(4, 7, 4)
     
     pdf.add_page()
     
@@ -539,7 +539,7 @@ def generate_pdf_to_bytes(resume: Any, include_summary: bool = False) -> bytes:
         basics = resume.get('basics', {})
     
     pdf = ResumePDF()
-    pdf.set_margins(5, 5, 5)  # Minimal margins for maximum content width
+    pdf.set_margins(4, 5, 4)  # Minimal margins for maximum content width
     pdf.add_page()
     
     # Add header with name and contact info
@@ -677,9 +677,9 @@ def _generate_pdf_from_dict(resume_dict: dict, output_path: str, compact_mode: b
     
     # Tighter margins for more content on one page - use full page width
     if compact_mode:
-        pdf.set_margins(5, 5, 5)
+        pdf.set_margins(4, 5, 4)
     else:
-        pdf.set_margins(5, 5, 5)
+        pdf.set_margins(4, 5, 4)
     
     pdf.add_page()
     
