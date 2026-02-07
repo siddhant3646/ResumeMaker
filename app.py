@@ -393,38 +393,65 @@ def render_step_1_upload():
     st.markdown('</div>', unsafe_allow_html=True)  # Close bento-grid
     
     if uploaded_file is not None:
-        with st.spinner("📄 Parsing your resume..."):
-            try:
-                # Extract text
-                resume_text = extract_text_from_pdf(uploaded_file)
-                
-                # Parse with Gemma
-                api_keys = get_api_keys()
-                if api_keys["gemma"]:
-                    parsed = parse_resume_with_gemma(resume_text, api_keys["gemma"])
-                    st.session_state.parsed_resume = parsed
+        # Check if we need to parse (new file or not yet parsed)
+        current_file_name = uploaded_file.name
+        already_parsed = (
+            st.session_state.parsed_resume is not None and 
+            st.session_state.get('uploaded_file_name') == current_file_name
+        )
+        
+        if already_parsed:
+            # Already parsed this file, just show the result
+            st.success("✅ Resume parsed successfully!")
+            
+            with st.expander("👁️ Preview Parsed Resume"):
+                resume = st.session_state.parsed_resume
+                st.write(f"**Name:** {resume.basics.name}")
+                st.write(f"**Email:** {resume.basics.email}")
+                st.write(f"**Experience:** {len(resume.experience)} roles")
+                st.write(f"**Education:** {len(resume.education)} entries")
+                if resume.skills:
+                    st.write(f"**Skills:** {len(resume.skills.languages_frameworks) + len(resume.skills.tools)} technologies")
+            
+            # Continue button
+            if st.button("Continue →", type="primary", use_container_width=True):
+                st.session_state.step = 2
+                st.rerun()
+        else:
+            # New file - parse it
+            with st.spinner("📄 Parsing your resume..."):
+                try:
+                    # Extract text
+                    resume_text = extract_text_from_pdf(uploaded_file)
                     
-                    # Show parsed info
-                    st.success("✅ Resume parsed successfully!")
-                    
-                    with st.expander("👁️ Preview Parsed Resume"):
-                        resume = st.session_state.parsed_resume
-                        st.write(f"**Name:** {resume.basics.name}")
-                        st.write(f"**Email:** {resume.basics.email}")
-                        st.write(f"**Experience:** {len(resume.experience)} roles")
-                        st.write(f"**Education:** {len(resume.education)} entries")
-                        if resume.skills:
-                            st.write(f"**Skills:** {len(resume.skills.languages_frameworks) + len(resume.skills.tools)} technologies")
-                    
-                    # Continue button
-                    if st.button("Continue →", type="primary", use_container_width=True):
-                        st.session_state.step = 2
-                        st.rerun()
-                else:
-                    st.error("⚠️ API key not configured. Please set up your API keys.")
-                    
-            except Exception as e:
-                st.error(f"❌ Error parsing resume: {str(e)}")
+                    # Parse with Gemma
+                    api_keys = get_api_keys()
+                    if api_keys["gemma"]:
+                        parsed = parse_resume_with_gemma(resume_text, api_keys["gemma"])
+                        st.session_state.parsed_resume = parsed
+                        st.session_state.uploaded_file_name = current_file_name
+                        
+                        # Show parsed info
+                        st.success("✅ Resume parsed successfully!")
+                        
+                        with st.expander("👁️ Preview Parsed Resume"):
+                            resume = st.session_state.parsed_resume
+                            st.write(f"**Name:** {resume.basics.name}")
+                            st.write(f"**Email:** {resume.basics.email}")
+                            st.write(f"**Experience:** {len(resume.experience)} roles")
+                            st.write(f"**Education:** {len(resume.education)} entries")
+                            if resume.skills:
+                                st.write(f"**Skills:** {len(resume.skills.languages_frameworks) + len(resume.skills.tools)} technologies")
+                        
+                        # Continue button
+                        if st.button("Continue →", type="primary", use_container_width=True):
+                            st.session_state.step = 2
+                            st.rerun()
+                    else:
+                        st.error("⚠️ API key not configured. Please set up your API keys.")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error parsing resume: {str(e)}")
 
 
 def render_step_2_job_description():
