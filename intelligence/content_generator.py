@@ -256,6 +256,12 @@ class ContentGenerator:
         Regenerate resume using Gemma's ATS feedback to fix shortcomings.
         Uses the shortcomings, missing_keywords, and weak_bullets from ATS scoring.
         """
+        print(f"DEBUG: regenerate_with_feedback called with score {ats_feedback.overall}")
+        
+        """
+        Regenerate resume using Gemma's ATS feedback to fix shortcomings.
+        Uses the shortcomings, missing_keywords, and weak_bullets from ATS scoring.
+        """
         import requests
         
         # Build improvement prompt with ATS feedback
