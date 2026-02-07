@@ -455,103 +455,101 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         st.error("⚠️ API keys not configured. Please set up NVIDIA and Gemma API keys.")
         return
     
-    # Create containers for dynamic updates
-    progress_container = st.container()
-    status_container = st.container()
+    # Create placeholders for dynamic updates
+    status_placeholder = st.empty()
+    progress_bar = st.progress(0.05)
     
-    with progress_container:
-        # Stage 1: Initializing
-        status_container.markdown(
-            animation_manager.get_stage_html('initializing'),
+    # Stage 1: Initializing
+    status_placeholder.markdown(
+        animation_manager.get_stage_html('initializing'),
+        unsafe_allow_html=True
+    )
+    
+    # Initialize components
+    try:
+        content_gen = ContentGenerator(api_keys["gemma"], api_keys["nvidia"])
+        validator = PDFValidator(api_keys["gemma"])
+        scorer = ATSScorer()
+        
+        time.sleep(0.5)
+        
+        # Stage 2: Reading Resume
+        status_placeholder.markdown(
+            animation_manager.get_stage_html('reading_resume'),
             unsafe_allow_html=True
         )
-        progress_bar = st.progress(0.05)
+        progress_bar.progress(0.15)
+        resume = st.session_state.parsed_resume
+        time.sleep(0.5)
         
-        # Initialize components
-        try:
-            content_gen = ContentGenerator(api_keys["gemma"], api_keys["nvidia"])
-            validator = PDFValidator(api_keys["gemma"])
-            scorer = ATSScorer()
-            
-            time.sleep(0.5)
-            
-            # Stage 2: Reading Resume
-            status_container.markdown(
-                animation_manager.get_stage_html('reading_resume'),
+        # Stage 3: Analyzing JD
+        status_placeholder.markdown(
+            animation_manager.get_stage_html('analyzing_jd'),
+            unsafe_allow_html=True
+        )
+        progress_bar.progress(0.25)
+        
+        # Generate tailored resume (this runs the full pipeline)
+        tailored, job_analysis = content_gen.generate_tailored_resume(
+            resume, job_description, config
+        )
+        st.session_state.job_analysis = job_analysis
+        st.session_state.tailored_resume = tailored
+        
+        # Show ATS score
+        if tailored.ats_score:
+            progress_bar.progress(0.60)
+            status_placeholder.markdown(
+                animation_manager.get_ats_score_card(
+                    tailored.ats_score.overall,
+                    {
+                        'star_compliance': tailored.ats_score.star_compliance,
+                        'quantification': tailored.ats_score.quantification,
+                        'keyword_match': tailored.ats_score.keyword_match,
+                        'action_verbs': tailored.ats_score.action_verb_strength
+                    }
+                ),
                 unsafe_allow_html=True
             )
-            progress_bar.progress(0.15)
-            resume = st.session_state.parsed_resume
-            time.sleep(0.5)
             
-            # Stage 3: Analyzing JD
-            status_container.markdown(
-                animation_manager.get_stage_html('analyzing_jd'),
-                unsafe_allow_html=True
-            )
-            progress_bar.progress(0.25)
-            
-            # Generate tailored resume (this runs the full pipeline)
-            tailored, job_analysis = content_gen.generate_tailored_resume(
-                resume, job_description, config
-            )
-            st.session_state.job_analysis = job_analysis
-            st.session_state.tailored_resume = tailored
-            
-            # Show ATS score
-            if tailored.ats_score:
-                progress_bar.progress(0.60)
-                status_container.markdown(
-                    animation_manager.get_ats_score_card(
-                        tailored.ats_score.overall,
-                        {
-                            'star_compliance': tailored.ats_score.star_compliance,
-                            'quantification': tailored.ats_score.quantification,
-                            'keyword_match': tailored.ats_score.keyword_match,
-                            'action_verbs': tailored.ats_score.action_verb_strength
-                        }
-                    ),
+            # Check if meets target
+            if tailored.ats_score.overall >= config.target_ats_score:
+                # Success!
+                status_placeholder.markdown(
+                    animation_manager.get_stage_html('complete'),
                     unsafe_allow_html=True
                 )
+                progress_bar.progress(1.0)
                 
-                # Check if meets target
-                if tailored.ats_score.overall >= config.target_ats_score:
-                    # Success!
-                    status_container.markdown(
-                        animation_manager.get_stage_html('complete'),
-                        unsafe_allow_html=True
-                    )
-                    progress_bar.progress(1.0)
-                    
-                    # Show fabrication notice if applicable
-                    if tailored.fabrication_notes:
-                        with st.expander("ℹ️ Content Enhancement Details"):
-                            st.write("The following enhancements were made:")
-                            for note in tailored.fabrication_notes:
-                                st.write(f"- {note}")
-                    
-                    time.sleep(1.5)
-                    st.session_state.step = 3
-                    st.rerun()
-                else:
-                    # Need regeneration - show current score and continue improving
-                    st.warning(f"Current ATS score: {tailored.ats_score.overall}/100. Optimizing further...")
-                    
-                    # In a real implementation, we would continue with regeneration loop
-                    # For now, show what we have
-                    status_container.markdown(
-                        animation_manager.get_stage_html('complete'),
-                        unsafe_allow_html=True
-                    )
-                    progress_bar.progress(1.0)
-                    time.sleep(1)
-                    st.session_state.step = 3
-                    st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Error during generation: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
+                # Show fabrication notice if applicable
+                if tailored.fabrication_notes:
+                    with st.expander("ℹ️ Content Enhancement Details"):
+                        st.write("The following enhancements were made:")
+                        for note in tailored.fabrication_notes:
+                            st.write(f"- {note}")
+                
+                time.sleep(1.5)
+                st.session_state.step = 3
+                st.rerun()
+            else:
+                # Need regeneration - show current score and continue improving
+                st.warning(f"Current ATS score: {tailored.ats_score.overall}/100. Optimizing further...")
+                
+                # In a real implementation, we would continue with regeneration loop
+                # For now, show what we have
+                status_placeholder.markdown(
+                    animation_manager.get_stage_html('complete'),
+                    unsafe_allow_html=True
+                )
+                progress_bar.progress(1.0)
+                time.sleep(1)
+                st.session_state.step = 3
+                st.rerun()
+        
+    except Exception as e:
+        st.error(f"❌ Error during generation: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
 
 
 def render_step_3_download():

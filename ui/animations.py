@@ -155,7 +155,7 @@ class AnimationManager:
         
         attempt_badge = f'<span style="background: rgba(245, 158, 11, 0.3); padding: 4px 12px; border-radius: 12px; font-size: 12px; margin-left: 10px;">Attempt {attempt}</span>' if attempt > 0 else ''
         
-        return f"""
+        html = f"""
         <div style="
             text-align: center; 
             padding: 2rem; 
@@ -292,6 +292,7 @@ class AnimationManager:
             }}
         </style>
         """
+        return html.strip()
     
     def _get_animation_css(self, animation_type: str) -> str:
         """Get CSS keyframes for specific animation type"""
@@ -392,7 +393,7 @@ class AnimationManager:
         color = '#10b981' if score >= 90 else '#f59e0b' if score >= 80 else '#ef4444'
         status = 'EXCELLENT' if score >= 90 else 'GOOD' if score >= 80 else 'NEEDS WORK'
         
-        return f"""
+        html = f"""
         <div style="
             background: linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(45,90,135,0.1) 100%);
             border: 2px solid {color};
@@ -436,10 +437,11 @@ class AnimationManager:
             </div>
         </div>
         """
+        return html.strip()
     
     def _get_metric_row(self, label: str, value: int, color: str) -> str:
         """Generate metric row for ATS score card"""
-        return f"""
+        html = f"""
         <div style="
             background: rgba(255,255,255,0.05);
             padding: 0.75rem;
@@ -457,6 +459,7 @@ class AnimationManager:
             </div>
         </div>
         """
+        return html.strip()
 
 
 # Global animation manager instance
