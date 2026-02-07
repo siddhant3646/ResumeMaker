@@ -150,22 +150,50 @@ def configure_page():
 # API Key Management
 # ============================================================================
 
+def decrypt_api_key_from_secrets(encrypted_string: str, password: str) -> str:
+    """Decrypt an API key using Fernet symmetric encryption."""
+    combined = base64.urlsafe_b64decode(encrypted_string.encode())
+    salt = combined[:16]
+    encrypted_data = combined[16:]
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=480000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    f = Fernet(key)
+    return f.decrypt(encrypted_data).decode()
+
+
 def get_api_keys() -> Dict[str, str]:
-    """Get API keys from secrets or environment"""
+    """Get API keys from secrets (encrypted) or environment"""
     try:
-        # Try to get from Streamlit secrets first
-        nvidia_key = st.secrets.get("nvidia", {}).get("nvidia_api_key", "nvapi-")
-        gemma_key = st.secrets.get("gemma", {}).get("gemma_api_key", "AIza")
+        # Get encryption password and encrypted keys from Streamlit secrets
+        encryption_password = st.secrets.get("ENCRYPTION_PASSWORD", "")
+        google_encrypted = st.secrets.get("GOOGLE_API_KEY_ENCRYPTED", "")
+        nvidia_encrypted = st.secrets.get("NVIDIA_API_KEY_ENCRYPTED", "")
+        
+        if encryption_password and google_encrypted:
+            gemma_key = decrypt_api_key_from_secrets(google_encrypted, encryption_password)
+        else:
+            gemma_key = ""
+        
+        if encryption_password and nvidia_encrypted:
+            nvidia_key = decrypt_api_key_from_secrets(nvidia_encrypted, encryption_password)
+        else:
+            nvidia_key = ""
         
         return {
             "nvidia": nvidia_key,
             "gemma": gemma_key
         }
-    except:
-        # Fallback for local development
+    except Exception as e:
+        st.error(f"Error decrypting API keys: {e}")
         return {
-            "nvidia": "nvapi-",
-            "gemma": "AIza"
+            "nvidia": "",
+            "gemma": ""
         }
 
 
