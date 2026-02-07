@@ -297,7 +297,7 @@ def main():
             padding: 0.5rem 0;
         ">ATS Resume Maker</h1>
         <p style="color: #94a3b8; font-size: 1.1rem; margin-top: 0.5rem;">
-            AI-Powered Resume Optimization for FAANG/MAANG Companies
+            AI-Powered Resume Optimizer
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -317,30 +317,6 @@ def main():
             <span style="font-size: 1.3rem;">✨</span>
             <span><span class="value">AI</span> Enhanced</span>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Modern Hero Header
-    
-    # Modern Step Indicator
-    current_step = st.session_state.step
-    steps_html = []
-    for i in range(1, 4):
-        step_class = ""
-        if i < current_step:
-            step_class = "completed"
-        elif i == current_step:
-            step_class = "active"
-        
-        if i > 1:
-            line_class = "active" if i <= current_step else ""
-            steps_html.append(f'<div class="step-line {line_class}"></div>')
-        
-        steps_html.append(f'<div class="step-dot-modern {step_class}">{i}</div>')
-    
-    st.markdown(f"""
-    <div class="step-indicator-modern animate-fade-in-up" style="animation-delay: 0.2s;">
-        {''.join(steps_html)}
     </div>
     """, unsafe_allow_html=True)
     
@@ -519,7 +495,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
     try:
         content_gen = ContentGenerator(api_keys["gemma"], api_keys["nvidia"])
         validator = PDFValidator(api_keys["gemma"])
-        scorer = ATSScorer()
+        scorer = ATSScorer(api_keys["gemma"])
         
         time.sleep(0.5)
         
@@ -535,6 +511,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         # Regeneration loop
         best_tailored = None
         best_score = 0
+        previous_ats_feedback = None
         
         for attempt in range(1, MAX_ATTEMPTS + 1):
             # Stage 3: Analyzing/Generating
@@ -548,14 +525,30 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                     animation_manager.get_stage_html('generating', attempt=attempt),
                     unsafe_allow_html=True
                 )
-                info_placeholder.info(f"🔄 Attempt {attempt}/{MAX_ATTEMPTS} - Optimizing to reach target ATS score of {config.target_ats_score}...")
+                # Show shortcomings being addressed
+                if previous_ats_feedback and previous_ats_feedback.shortcomings:
+                    shortcomings_text = ", ".join(previous_ats_feedback.shortcomings[:3])
+                    info_placeholder.info(f"🔄 Attempt {attempt}/{MAX_ATTEMPTS} - Fixing: {shortcomings_text}")
+                else:
+                    info_placeholder.info(f"🔄 Attempt {attempt}/{MAX_ATTEMPTS} - Optimizing to reach target ATS score of {config.target_ats_score}...")
             
             progress_bar.progress(0.25 + (attempt - 1) * 0.2)
             
-            # Generate tailored resume
-            tailored, job_analysis = content_gen.generate_tailored_resume(
-                resume, job_description, config
-            )
+            # Generate or regenerate tailored resume
+            if attempt == 1:
+                # First attempt: fresh generation
+                tailored, job_analysis = content_gen.generate_tailored_resume(
+                    resume, job_description, config
+                )
+            else:
+                # Retry: use regenerate_with_feedback with shortcomings from Gemma
+                tailored = content_gen.regenerate_with_feedback(
+                    previous_resume=best_tailored,
+                    original_resume=resume,
+                    job_analysis=job_analysis,
+                    ats_feedback=previous_ats_feedback,
+                    config=config
+                )
             
             # Track best result
             current_score = tailored.ats_score.overall if tailored.ats_score else 0
@@ -564,6 +557,9 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 best_tailored = tailored
                 st.session_state.job_analysis = job_analysis
                 st.session_state.tailored_resume = tailored
+            
+            # Store ATS feedback for next iteration
+            previous_ats_feedback = tailored.ats_score
             
             # Show ATS score
             if tailored.ats_score:

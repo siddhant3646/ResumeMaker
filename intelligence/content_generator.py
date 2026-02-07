@@ -29,7 +29,7 @@ class ContentGenerator:
         self.role_detector = RoleDetector(gemma_api_key)
         self.bullet_generator = FAANGBulletGenerator(gemma_api_key)
         self.fabricator = ExperienceFabricator(gemma_api_key, enabled=True)
-        self.ats_scorer = ATSScorer()
+        self.ats_scorer = ATSScorer(gemma_api_key)
         self.skills_analyzer = SkillsGapAnalyzer()
         self.page_manager = PageManager()
     
@@ -275,3 +275,162 @@ class ContentGenerator:
             'projects': len(result.projects),
             'ats_score': result.ats_score.overall if result.ats_score else 0
         }
+    
+    def regenerate_with_feedback(
+        self,
+        previous_resume: TailoredResume,
+        original_resume: ParsedResume,
+        job_analysis: JobAnalysis,
+        ats_feedback: 'ATSScore',
+        config: GenerationConfig
+    ) -> TailoredResume:
+        """
+        Regenerate resume using Gemma's ATS feedback to fix shortcomings.
+        Uses the shortcomings, missing_keywords, and weak_bullets from ATS scoring.
+        """
+        import requests
+        
+        # Build improvement prompt with ATS feedback
+        shortcomings = "\n".join(f"- {s}" for s in ats_feedback.shortcomings[:5])
+        missing_kw = ", ".join(ats_feedback.missing_keywords[:10])
+        weak_bullets_text = "\n".join(f"- {b}" for b in ats_feedback.weak_bullets[:5])
+        
+        improvement_prompt = f"""You are an expert resume writer. The previous resume attempt scored {ats_feedback.overall}/100 on ATS.
+To pass FAANG standards, it needs >90.
+
+**JOB REQUIREMENTS:**
+- Role: {job_analysis.role_title}
+- Seniority: {job_analysis.seniority_level.value}
+- Required Skills: {', '.join(job_analysis.key_skills[:10])}
+
+**SHORTCOMINGS FROM ATS EVALUATION (FIX THESE):**
+{shortcomings}
+
+**MISSING KEYWORDS (MUST ADD THESE):**
+{missing_kw}
+
+**WEAK BULLETS TO IMPROVE:**
+{weak_bullets_text}
+
+**CURRENT BULLETS:**
+{self._format_current_bullets(previous_resume)}
+
+**YOUR TASK:**
+Generate improved bullet points that:
+1. Include ALL missing keywords naturally
+2. Fix the shortcomings identified
+3. Use STAR format (Situation, Task, Action, Result)
+4. Include quantified metrics (%, $, scale like K/M)
+5. Start with strong action verbs (Architected, Engineered, Spearheaded)
+
+Return a JSON array of improved bullets:
+{{"improved_bullets": ["bullet 1", "bullet 2", ...]}}
+"""
+        
+        try:
+            # Use NVIDIA API (Kimi) for regeneration
+            improved_bullets = self._call_nvidia_for_improvement(improvement_prompt)
+            
+            # Apply improvements to resume
+            improved_resume = self._apply_improvements(
+                previous_resume, improved_bullets, job_analysis, ats_feedback
+            )
+            
+            # Recalculate ATS score
+            improved_resume.ats_score = self.ats_scorer.calculate_score(
+                improved_resume, job_analysis
+            )
+            
+            improved_resume.fabrication_notes.append(
+                f"Regenerated with ATS feedback. Previous score: {ats_feedback.overall}"
+            )
+            
+            return improved_resume
+            
+        except Exception as e:
+            # Fallback: just return previous with note
+            previous_resume.fabrication_notes.append(f"Regeneration failed: {str(e)}")
+            return previous_resume
+    
+    def _format_current_bullets(self, resume: TailoredResume) -> str:
+        """Format current bullets for the improvement prompt"""
+        lines = []
+        for exp in resume.experience:
+            lines.append(f"\n[{exp.company} - {exp.role}]")
+            for bullet in exp.bullets:
+                lines.append(f"  - {bullet}")
+        return "\n".join(lines)
+    
+    def _call_nvidia_for_improvement(self, prompt: str) -> List[str]:
+        """Call NVIDIA API (Kimi) to get improved bullets"""
+        import requests
+        import json
+        
+        url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.nvidia_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "nvidia/llama-3.1-nemotron-70b-instruct",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 2000
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+        
+        # Parse JSON from response
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if json_match:
+            data = json.loads(json_match.group())
+            return data.get("improved_bullets", [])
+        
+        return []
+    
+    def _apply_improvements(
+        self,
+        resume: TailoredResume,
+        improved_bullets: List[str],
+        job_analysis: JobAnalysis,
+        ats_feedback: 'ATSScore'
+    ) -> TailoredResume:
+        """Apply improved bullets to resume"""
+        from copy import deepcopy
+        
+        improved = deepcopy(resume)
+        
+        # Add missing keywords to skills
+        if improved.skills and ats_feedback.missing_keywords:
+            for kw in ats_feedback.missing_keywords:
+                if kw.lower() not in [s.lower() for s in improved.skills.languages_frameworks + improved.skills.tools]:
+                    improved.skills.tools.append(kw)
+        
+        # Replace weak bullets with improved ones
+        bullet_idx = 0
+        weak_set = set(b.lower().strip() for b in ats_feedback.weak_bullets)
+        
+        for exp in improved.experience:
+            new_bullets = []
+            for bullet in exp.bullets:
+                if bullet.lower().strip() in weak_set and bullet_idx < len(improved_bullets):
+                    new_bullets.append(improved_bullets[bullet_idx])
+                    bullet_idx += 1
+                else:
+                    new_bullets.append(bullet)
+            exp.bullets = new_bullets
+        
+        # If we have extra improved bullets, add them to first experience
+        if bullet_idx < len(improved_bullets) and improved.experience:
+            remaining = improved_bullets[bullet_idx:]
+            improved.experience[0].bullets.extend(remaining[:2])  # Add up to 2 more
+        
+        return improved

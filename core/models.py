@@ -145,6 +145,9 @@ class ATSScore(BaseModel):
     format_compliance: int = Field(ge=0, le=100)
     section_completeness: int = Field(ge=0, le=100)
     suggestions: List[str] = []
+    shortcomings: List[str] = []  # Detailed issues for Kimi to fix on retry
+    missing_keywords: List[str] = []  # JD keywords not found in resume
+    weak_bullets: List[str] = []  # Bullets that need improvement
     
     def is_faang_ready(self) -> bool:
         """Check if resume meets FAANG standards (>90)"""
