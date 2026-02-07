@@ -8,7 +8,12 @@ import json
 import re
 from typing import List, Dict, Tuple
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    GOOGLE_GENAI_AVAILABLE = True
+except ImportError:
+    GOOGLE_GENAI_AVAILABLE = False
+    genai = None
 
 from core.models import ATSScore, ParsedResume, JobAnalysis, SeniorityLevel
 
@@ -19,8 +24,25 @@ class ATSScorer:
     def __init__(self, api_key: str):
         """Initialize scorer with Gemma API key"""
         self.api_key = api_key
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemma-3-27b-it')
+        self.model = None
+        self.page_strategy = getattr(self, 'page_strategy', 'optimize')
+        self.target_pages = getattr(self, 'target_pages', '1')
+        if GOOGLE_GENAI_AVAILABLE and genai is not None:
+            try:
+                if hasattr(genai, 'configure'):
+                    genai.configure(api_key=api_key)
+                # Try to get the GenerativeModel from different possible locations
+                try:
+                    self.model = genai.GenerativeModel('gemma-3-27b-it')
+                except:
+                    try:
+                        from google.generativeai import GenerativeModel
+                        self.model = GenerativeModel('gemma-3-27b-it')
+                    except:
+                        print("Warning: Could not initialize GenerativeModel")
+            except Exception as e:
+                print(f"Warning: Failed to initialize Gemma model: {e}")
+                self.model = None
     
     def calculate_score(
         self,
@@ -39,8 +61,10 @@ class ATSScorer:
         prompt = self._build_scoring_prompt(resume_text, bullets, job_analysis)
         
         try:
+            if self.model is None:
+                raise Exception("Model not initialized")
             response = self.model.generate_content(prompt)
-            scores = self._parse_gemma_response(response.text)
+            scores = self._parse_ats_response(response.text)
             
             return ATSScore(
                 overall=scores.get('overall', 75),
@@ -77,15 +101,13 @@ class ATSScorer:
         bullets: List[str],
         job_analysis: JobAnalysis
     ) -> str:
-        """Build prompt for Gemma to score the resume against JD"""
+        """Build prompt for Gemma with pagination awareness"""
         bullets_text = "\n".join(f"- {b}" for b in bullets[:20])
         skills_required = ", ".join(job_analysis.key_skills[:15])
         nice_to_have = ", ".join(job_analysis.nice_to_have_skills[:10])
         focus_areas = ", ".join(job_analysis.role_focus_areas[:5]) if job_analysis.role_focus_areas else "N/A"
         
-        return f"""You are an expert ATS (Applicant Tracking System) resume evaluator for FAANG/MAANG companies.
-
-Evaluate this TAILORED resume against the JOB DESCRIPTION requirements. Provide scores AND detailed shortcomings.
+        return f"""You are an advanced Applicant Tracking System (ATS) Ranking Engine and Executive Recruiter. Your task is to perform a high-precision audit of a resume against a specific Job Description (JD).
 
 **JOB DESCRIPTION ANALYSIS:**
 - Role: {job_analysis.role_title}
@@ -102,42 +124,125 @@ Evaluate this TAILORED resume against the JOB DESCRIPTION requirements. Provide 
 **RESUME BULLETS:**
 {bullets_text}
 
-**YOUR TASK:**
-1. Score each dimension (0-100)
-2. Identify SPECIFIC shortcomings that prevent score >90
-3. List JD keywords MISSING from resume
-4. Identify weak bullets that need improvement
+**SCORING LOGIC (Scale 1-100):**
+1. **Keyword Match (40%)**: Identify missing hard skills, technologies, and industry-specific terminology.
+2. **Impact & Quantification (30%)**: Evaluate if bullet points use the "Action Verb + Task + Result (Number)" formula.
+3. **Structural Integrity (15%)**: Detect "un-parsable" elements like columns, tables, images, or non-standard headers.
+4. **Style & Brevity (15%)**: Check for wordiness, filler phrases (e.g., "team player"), and page length.
 
-**SCORING DIMENSIONS:**
-1. **keyword_match**: Does resume include required skills from JD? (Target: 90+)
-2. **star_compliance**: Do bullets follow STAR format? (Target: 85+)
-3. **quantification**: Are achievements quantified with metrics? (Target: 85+)
-4. **action_verb_strength**: Strong verbs (Architected, Engineered) not weak (Worked on)? (Target: 80+)
-5. **format_compliance**: ATS-friendly format with standard sections? (Target: 90+)
-6. **section_completeness**: All sections complete? (Target: 90+)
-7. **overall**: Overall ATS score. MUST BE >90 if resume meets criteria.
+**OPERATIONAL RULES:**
+- Be brutally honest. If a bullet point is weak, call it "Low Impact."
+- Extract keywords from the JD and cross-reference them with the Resume.
+- Assign a final composite score.
 
-Return ONLY this JSON structure:
-{{
-    "overall": <int>,
-    "keyword_match": <int>,
-    "star_compliance": <int>,
-    "quantification": <int>,
-    "action_verb_strength": <int>,
-    "format_compliance": <int>,
-    "section_completeness": <int>,
-    "suggestions": ["actionable suggestion 1", "actionable suggestion 2"],
-    "shortcomings": [
-        "Specific issue 1 that prevents higher score",
-        "Specific issue 2 based on JD requirements",
-        "Specific issue 3 for Kimi to fix"
-    ],
-    "missing_keywords": ["keyword1 from JD not in resume", "keyword2", "keyword3"],
-    "weak_bullets": ["Copy of bullet that needs improvement", "Another weak bullet"]
-}}
+**OUTPUT FORMAT:**
+### 1. Overall ATS Score: [X/100]
+### 2. Matching Analysis
+- **Top Keywords Found:** [List]
+- **Critical Missing Keywords:** [List]
+### 3. Impact Audit
+- **High Impact Bullets:** [Example from resume]
+- **Weak/Passive Bullets:** [Example from resume] -> *Correction: [Suggestion]*
+### 4. Structural Flags
+- [e.g., "Found multi-column layout—risky for older parsers."]
+### 5. Final Recommendation
+- [3 actionable steps to increase the score by 10+ points]
 
-BE SPECIFIC. The shortcomings and missing_keywords will be used to regenerate the resume.
-Return valid JSON only."""
+**IMPORTANT:** 
+- Provide the exact score in the format "Overall ATS Score: [X/100]"
+- Be specific and actionable in your recommendations
+- Focus on high-impact improvements that will increase the score significantly
+- Call out weak content directly and provide specific corrections"""
+    
+    def _parse_ats_response(self, response_text: str) -> Dict:
+        """Parse the new ATS Ranking Engine response format"""
+        scores = {}
+        
+        # Extract overall score - handle bracketed format [82/100]
+        overall_match = re.search(r'Overall ATS Score:\s*\[(\d+)/100\]', response_text)
+        if overall_match:
+            scores['overall'] = int(overall_match.group(1))
+        else:
+            # Try alternative format without brackets
+            overall_match_alt = re.search(r'Overall ATS Score:\s*(\d+)/100', response_text)
+            if overall_match_alt:
+                scores['overall'] = int(overall_match_alt.group(1))
+            else:
+                scores['overall'] = 75  # Default fallback
+        
+        # Extract missing keywords - handle multiple formats
+        missing_keywords = []
+        
+        # Try bold format with brackets: ** ["Kubernetes", "React"]
+        missing_keywords_match = re.search(r'Critical Missing Keywords:\s*\*\*\s*\[(.*?)\]', response_text, re.DOTALL)
+        if missing_keywords_match:
+            keywords_text = missing_keywords_match.group(1)
+            # Handle quoted keywords
+            if '"' in keywords_text:
+                keywords = re.findall(r'"([^"]+)"', keywords_text)
+                missing_keywords = [kw.strip() for kw in keywords if kw.strip()]
+            else:
+                # Handle comma-separated without quotes
+                missing_keywords = [kw.strip().strip('"\'') for kw in keywords_text.split(',') if kw.strip()]
+        else:
+            # Try regular bracketed format: ["Kubernetes", "React"]
+            missing_keywords_match = re.search(r'Critical Missing Keywords:\s*\[(.*?)\]', response_text, re.DOTALL)
+            if missing_keywords_match:
+                keywords_text = missing_keywords_match.group(1)
+                if '"' in keywords_text:
+                    keywords = re.findall(r'"([^"]+)"', keywords_text)
+                    missing_keywords = [kw.strip() for kw in keywords if kw.strip()]
+                else:
+                    missing_keywords = [kw.strip().strip('"\'') for kw in keywords_text.split(',') if kw.strip()]
+            else:
+                # Try bullet list format
+                bullet_match = re.search(r'Critical Missing Keywords:\s*\n((?:-\s*.*\n?)*)', response_text)
+                if bullet_match:
+                    bullet_text = bullet_match.group(1)
+                    bullets = re.findall(r'-\s*([^\n]+)', bullet_text)
+                    missing_keywords = [kw.strip() for kw in bullets if kw.strip()]
+        
+        scores['missing_keywords'] = missing_keywords
+        
+        # Extract weak bullets
+        weak_bullets = []
+        weak_bullets_match = re.search(r'Weak/Passive Bullets:\s*(.*?)\n###', response_text, re.DOTALL)
+        if weak_bullets_match:
+            weak_text = weak_bullets_match.group(1)
+            # Extract bullet text before "->" correction
+            bullet_matches = re.findall(r'-\s*\*?\*?\s*["\']?([^"\']+)["\']?\s*->', weak_text)
+            weak_bullets = [bullet.strip() for bullet in bullet_matches if bullet.strip()]
+        
+        scores['weak_bullets'] = weak_bullets
+        
+        # Extract shortcomings from structural flags and recommendations
+        shortcomings = []
+        structural_match = re.search(r'Structural Flags\s*\n(.*?)(?:\n###|$)', response_text, re.DOTALL)
+        if structural_match:
+            structural_text = structural_match.group(1).strip()
+            if structural_text and structural_text != '-':
+                shortcomings.append(f"Structural issue: {structural_text}")
+        
+        recommendation_match = re.search(r'Final Recommendation\s*\n(.*?)(?:\n###|$)', response_text, re.DOTALL)
+        if recommendation_match:
+            rec_text = recommendation_match.group(1).strip()
+            if rec_text and rec_text != '-':
+                shortcomings.append(f"Recommendation: {rec_text}")
+        
+        scores['shortcomings'] = shortcomings
+        
+        # Calculate component scores based on overall analysis
+        overall = scores['overall']
+        # Estimate component scores based on overall score
+        scores['keyword_match'] = min(int(overall * 0.4 / 40 * 100), 100)
+        scores['quantification'] = min(int(overall * 0.3 / 30 * 100), 100)
+        scores['star_compliance'] = min(int(overall * 0.85), 100)  # Assume good STAR if overall is high
+        scores['action_verb_strength'] = min(int(overall * 0.9), 100)
+        scores['format_compliance'] = 85 if 'Structural' not in str(shortcomings) else 70
+        scores['section_completeness'] = 85
+        scores['suggestions'] = shortcomings[:3]  # Use shortcomings as suggestions
+        
+        return scores
     
     def _parse_gemma_response(self, response_text: str) -> Dict:
         """Parse Gemma's JSON response"""

@@ -183,11 +183,35 @@ class RegenerationController:
             if ats_score.overall >= config.target_ats_score:
                 if self.progress_callback:
                     self.progress_callback(
-                        stage='complete',
-                        attempt=attempt_number,
-                        message=f"✅ Achieved target ATS score of {ats_score.overall}!",
-                        ats_score=ats_score.overall
-                    )
+                            stage='complete',
+                            attempt=attempt_number,
+                            message=f"✅ Achieved target ATS score of {ats_score.overall}!",
+                            ats_score=ats_score.overall
+                        )
+                
+                # Generate improvement suggestions for perfect 100+ score
+                perfect_score_prompt = f"""Your resume scored {ats_score.overall}/100 on ATS evaluation.
+
+To achieve a perfect 100+ score, suggest specific improvements:
+
+1. What 3-5 keywords would make this a perfect match?
+2. Which 2 bullet points could be strengthened with better action verbs?  
+3. What additional quantified metrics would demonstrate superior impact?
+
+Current strengths: {ats_score.keyword_match}/100 keywords, {ats_score.quantification}/100 quantification
+
+Provide specific, actionable suggestions to reach 100+ ATS score.
+Return: {{"perfect_score_improvements": ["suggestion1", "suggestion2", "suggestion3"]}}"""
+                
+                try:
+                    if self.scorer and self.scorer.model:
+                        response = self.scorer.model.generate_content(perfect_score_prompt)
+                        # Parse perfect score suggestions and save for user reference
+                        if hasattr(response, 'text'):
+                            suggestions_text = response.text
+                            print(f"Perfect score suggestions: {suggestions_text}")
+                except Exception as e:
+                    print(f"Perfect score suggestions error: {e}")
                 
                 return GenerationResult(
                     pdf_bytes=pdf_bytes,

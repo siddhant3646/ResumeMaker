@@ -146,30 +146,15 @@ class PageManager:
         distribution = {}
         remaining_bullets = max_bullets
         
-        # Most recent role: 40-50% of bullets
-        if sorted_exp:
-            recent_count = min(int(max_bullets * 0.45), 8)
-            distribution[sorted_exp[0].company] = recent_count
-            remaining_bullets -= recent_count
-        
-        # Second role: 25-30% of bullets
-        if len(sorted_exp) > 1 and remaining_bullets > 0:
-            second_count = min(int(max_bullets * 0.30), 5)
-            distribution[sorted_exp[1].company] = min(second_count, remaining_bullets)
-            remaining_bullets -= distribution[sorted_exp[1].company]
-        
-        # Third role: 15-20% of bullets
-        if len(sorted_exp) > 2 and remaining_bullets > 0:
-            third_count = min(int(max_bullets * 0.20), 3)
-            distribution[sorted_exp[2].company] = min(third_count, remaining_bullets)
-            remaining_bullets -= distribution[sorted_exp[2].company]
-        
-        # Remaining roles: 1-2 bullets each
-        for exp in sorted_exp[3:]:
-            if remaining_bullets > 0:
-                count = min(2, remaining_bullets)
-                distribution[exp.company] = count
-                remaining_bullets -= count
+        # Fixed distribution: Maximum 3 bullets per company for ATS readability
+        for exp in sorted_exp:
+            if remaining_bullets <= 0:
+                break
+            
+            # Cap at 3 bullets per company (optimized for ATS parsing)
+            bullet_count = min(3, remaining_bullets)
+            distribution[exp.company] = bullet_count
+            remaining_bullets -= bullet_count
         
         return distribution
     
@@ -182,20 +167,20 @@ class PageManager:
         """
         Estimate page count based on content
         """
-        # Calculate heights
+        # Calculate heights (conservative ATS optimization)
         avg_bullet_lines = 2.5
         bullet_height = bullets * avg_bullet_lines * self.LINE_HEIGHT
         
         header_height = len(sections) * self.HEADER_HEIGHT
-        summary_height = 15 if include_summary else 0  # ~3-4 lines
+        summary_height = 10 if include_summary else 0  # Conservative spacing
         
         total_content = bullet_height + header_height + summary_height
         
-        # Add fixed header
+        # Add fixed header with more padding
         total_content += 25
         
-        # Calculate pages needed
-        pages_needed = total_content / self.available_height
+        # Conservative page estimation with extra padding
+        pages_needed = total_content / (self.available_height - 80)  # More conservative spacing
         
         return max(1, int(pages_needed) + (1 if pages_needed % 1 > 0.8 else 0))
     

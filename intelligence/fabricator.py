@@ -370,41 +370,41 @@ class ExperienceFabricator:
         Generate a plausible experience entry
         Creates realistic company name, role, and achievements
         """
-        # Generate plausible company name (generic or based on context)
-        company_types = {
-            'tech': ['Tech', 'Digital', 'Cloud', 'Data', 'AI', 'Systems'],
-            'finance': ['Capital', 'Financial', 'Invest', 'Bank', 'Wealth'],
-            'healthcare': ['Health', 'Med', 'Bio', 'Care', 'Life Sciences']
-        }
+        # Use REAL company name from user context - never create fake companies
+        company_name = user_context.get('company_name', 'Current Company')
         
-        industry = company_context.get('industry', 'tech')
-        suffix = random.choice(company_types.get(industry, company_types['tech']))
-        company_name = f"{user_context.get('location', 'Global')} {suffix} Solutions"
+        # Generate role based on existing resume data
+        user_roles = user_context.get('existing_roles', ['Software Engineer'])
+        base_role = user_roles[0] if user_roles else 'Software Engineer'
         
-        # Generate role title
-        role_prefix = "Senior" if seniority_level in [SeniorityLevel.SENIOR, SeniorityLevel.STAFF] else ""
-        role = f"{role_prefix} {skill.title()} Engineer" if role_prefix else f"{skill.title()} Engineer"
+        # Seniority-appropriate role title
+        if seniority_level in [SeniorityLevel.SENIOR, SeniorityLevel.STAFF]:
+            role = f"Senior {base_role}"
+        elif seniority_level == SeniorityLevel.PRINCIPAL:
+            role = f"Principal {base_role}"
+        else:
+            role = base_role
         
-        # Generate bullets
+        # Generate realistic bullets (3-5 max)
         bullets = []
         for _ in range(random.randint(3, 5)):
             bullet = self.bullet_generator.generate_optimized_bullet(
-                skill=skill,
-                jd_keywords=company_context.get('jd_keywords', []),
-                user_tech_stack=user_context.get('tech_stack', []),
-                seniority_level=seniority_level,
-                focus_area=company_context.get('focus_area', 'backend')
-            )
+                    skill=skill,
+                    jd_keywords=company_context.get('jd_keywords', []),
+                    user_tech_stack=user_context.get('tech_stack', []),
+                    seniority_level=seniority_level,
+                    focus_area=company_context.get('focus_area', 'backend')
+                )
             bullets.append(bullet)
         
         return Experience(
-            company=company_name,
+            company=company_name,  # Use real company name
             role=role,
-            startDate="Jun 2020",  # Plausible dates
-            endDate="Dec 2021",
+            startDate="Jan 2020",  # Plausible past dates
+            endDate="Dec 2022",
             location=user_context.get('location', 'Remote'),
             bullets=bullets,
-            is_fabricated=True
+            is_fabricated=True  # Mark as fabricated additions
         )
     
     def fabricate_project(

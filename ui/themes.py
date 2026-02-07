@@ -1,22 +1,36 @@
 """
-Ultra-Modern 2026 UI Design System
-Glass morphism, aurora gradients, bento grids, modern typography
+Professional ATS-Optimized Design System
+Clean, readable interface optimized for resume generation and ATS compliance
 """
 
 from dataclasses import dataclass
 
 
 @dataclass
-class ModernTheme:
+class ProfessionalTheme:
     """
-    Ultra-modern 2026 design system
-    Features: Glass morphism, aurora gradients, floating cards, bento layout
+    Clean, ATS-optimized design system
+    Features: White background, black borders, professional colors, minimal effects
     """
     
-    # Base Colors
-    bg_dark: str = "#030712"  # Almost black
-    bg_navy: str = "#0f172a"  # Deep navy
-    bg_card: str = "rgba(15, 23, 42, 0.6)"  # Glass effect
+    # Base Colors - Professional white theme
+    bg_white: str = "#ffffff"  # Pure white
+    bg_light_gray: str = "#f8fafc"  # Very light gray
+    bg_card: str = "#ffffff"  # White cards
+    
+    # Professional Colors
+    text_primary: str = "#1f2937"  # Dark professional text
+    text_secondary: str = "#64748b"  # Muted gray
+    text_muted: str = "#9ca3af"   # Light gray
+    
+    # Accent Colors - Professional blue
+    accent_blue: str = "#2563eb"  # Professional blue
+    accent_light_blue: str = "#dbeafe"  # Light blue
+    border_color: str = "#1f2937"  # Professional border
+    
+    # Status Colors
+    success_green: str = "#16a34a"  # Professional green
+    warning_orange: str = "#f59e0b"  # Professional orange
     
     # Aurora Gradients
     aurora_1: str = "rgba(59, 130, 246, 0.4)"  # Blue
@@ -31,38 +45,173 @@ class ModernTheme:
     accent_emerald: str = "#34d399"
     accent_orange: str = "#fb923c"
     
-    # Gradients
-    gradient_hero: str = "linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)"
-    gradient_text: str = "linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%)"
-    gradient_card: str = "linear-gradient(145deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)"
-    gradient_button: str = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)"
-    gradient_success: str = "linear-gradient(135deg, #10b981 0%, #34d399 100%)"
+    # Clean Gradients - Professional and subtle
+    gradient_header: str = "linear-gradient(135deg, #1f2937 0%, #374151 100%)"
+    gradient_button: str = "linear-gradient(135deg, #2563eb 0%, #1e40af 100%)"
+    gradient_success: str = "linear-gradient(135deg, #16a34a 0%, #15803d 100%)"
     
-    # Glass Effect
-    glass_bg: str = "rgba(15, 23, 42, 0.4)"
-    glass_border: str = "rgba(255, 255, 255, 0.1)"
-    glass_blur: str = "blur(20px)"
-    
-    # Text
-    text_white: str = "#ffffff"
-    text_gray_100: str = "#f3f4f6"
-    text_gray_300: str = "#d1d5db"
-    text_gray_400: str = "#9ca3af"
-    text_gray_500: str = "#6b7280"
+    # Clean Effects - Minimal shadows and borders
+    shadow_subtle: str = "0 2px 8px rgba(0, 0, 0, 0.1)"
+    shadow_card: str = "0 4px 16px rgba(0, 0, 0, 0.08)"
+    shadow_hover: str = "0 6px 20px rgba(37, 99, 235, 0.15)"
 
 
-def get_modern_css() -> str:
-    """Generate ultra-modern CSS with aurora effects and glass morphism"""
-    theme = ModernTheme()
+def get_professional_css() -> str:
+    """Generate clean, ATS-friendly CSS"""
+    theme = ProfessionalTheme()
     
-    return f"""
-    <style>
+    css = f"""
     /* ===== RESET & BASE ===== */
     * {{
         margin: 0;
         padding: 0;
         box-sizing: border-box;
+        font-family: 'Georgia', 'Times New Roman', serif;
     }}
+    
+    /* ===== BODY ===== */
+    .stApp {{
+        background: {theme.bg_white};
+        color: {theme.text_primary};
+        min-height: 100vh;
+    }}
+    
+    /* ===== CLEAN CARDS ===== */
+    .clean-card {{
+        background: {theme.bg_card};
+        border: 2px solid {theme.border_color};
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: {theme.shadow_card};
+        transition: all 0.2s ease;
+    }}
+    
+    .clean-card:hover {{
+        transform: translateY(-2px);
+        box-shadow: {theme.shadow_hover};
+        border-color: {theme.accent_blue};
+    }}
+    
+    /* ===== PROFESSIONAL BUTTONS ===== */
+    .stButton > button {{
+        background: {theme.gradient_button} !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 6px !important;
+        padding: 0.75rem 2rem !important;
+        font-weight: 600 !important;
+        font-family: inherit !important;
+        transition: all 0.2s ease !important;
+        box-shadow: {theme.shadow_subtle};
+    }}
+    
+    .stButton > button:hover {{
+        transform: translateY(-1px) !important;
+        box-shadow: {theme.shadow_hover} !important;
+    }}
+    
+    /* ===== SECTION HEADERS ===== */
+    .section-header {{
+        border-bottom: 2px solid {theme.border_color};
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        font-weight: 700;
+        color: {theme.text_primary};
+    }}
+    
+    /* ===== ATS SCORE DISPLAY ===== */
+    .ats-score-display {{
+        background: {theme.bg_light_gray};
+        border: 2px solid {theme.border_color};
+        border-radius: 12px;
+        padding: 2rem;
+        text-align: center;
+        margin: 1rem 0;
+    }}
+    
+    .ats-score-value {{
+        font-size: 3rem;
+        font-weight: 800;
+        color: {theme.text_primary};
+        margin-bottom: 0.5rem;
+    }}
+    
+    /* ===== CLEAN INPUTS ===== */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea {{
+        background: {theme.bg_white} !important;
+        border: 2px solid {theme.border_color} !important;
+        border-radius: 6px !important;
+        padding: 1rem !important;
+        font-family: inherit !important;
+        transition: border-color 0.2s ease !important;
+    }}
+    
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus {{
+        border-color: {theme.accent_blue} !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+        outline: none !important;
+    }}
+    
+    /* ===== UPLOAD AREA ===== */
+    .upload-zone {{
+        background: {theme.bg_light_gray};
+        border: 2px dashed {theme.text_muted};
+        border-radius: 8px;
+        padding: 3rem;
+        text-align: center;
+        transition: all 0.2s ease;
+    }}
+    
+    .upload-zone:hover {{
+        border-color: {theme.accent_blue};
+        background: {theme.accent_light_blue};
+    }}
+    
+    /* ===== PROGRESS BARS ===== */
+    .stProgress > div > div > div {{
+        background: {theme.gradient_button} !important;
+        border-radius: 4px !important;
+    }}
+    
+    /* ===== CLEAN SCROLLBAR ===== */
+    ::-webkit-scrollbar {{
+        width: 8px;
+        height: 8px;
+    }}
+    
+    ::-webkit-scrollbar-track {{
+        background: {theme.bg_light_gray};
+    }}
+    
+    ::-webkit-scrollbar-thumb {{
+        background: {theme.text_muted};
+        border-radius: 4px;
+    }}
+    
+    /* ===== REMOVE FANCY EFFECTS ===== */
+    .blob, .aurora, .floating-particle {{
+        display: none !important;
+    }}
+    
+    /* ===== HIDE STREAMLIT BRANDING ===== */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    
+    /* ===== MAIN CONTENT Z-INDEX FIX ===== */
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"],
+    .main .block-container,
+    .stApp > div {{
+        position: relative;
+        z-index: 1;
+    }}
+    """
+    
+    return f"<style>{css}</style>"
     
     /* ===== AURORA BACKGROUND ===== */
     .stApp {{

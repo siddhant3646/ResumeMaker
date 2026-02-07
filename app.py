@@ -57,7 +57,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # Import new modules - try relative imports first
 try:
-    from ui.themes import inject_modern_theme, get_modern_css, ModernTheme
+    from ui.professional_theme import inject_professional_theme, get_professional_css, ProfessionalTheme
     from ui.animations import animation_manager
 except ImportError:
     # Fallback for Streamlit Cloud
@@ -126,16 +126,16 @@ except ImportError:
 # ============================================================================
 
 def configure_page():
-    """Configure Streamlit page with ultra-modern 2026 design"""
+    """Configure Streamlit page with clean, professional theme"""
     st.set_page_config(
         page_title="ResumeMaker AI",
-        page_icon="🚀",
+        page_icon="📄",
         layout="wide",
         initial_sidebar_state="collapsed"
     )
     
-    # Inject modern theme CSS
-    inject_modern_theme()
+    # Inject professional theme
+    inject_professional_theme()
     
     # Hide sidebar completely
     st.markdown("""
@@ -244,19 +244,12 @@ def render_settings_panel(config: GenerationConfig) -> GenerationConfig:
             )
             config.enable_vision_validation = enable_vision
             
-            # Target ATS Score - FAANG Standard
-            target_ats = st.slider(
-                "🎯 Target ATS Score (FAANG Standard)",
-                min_value=90,
-                max_value=100,
-                value=config.target_ats_score,
-                help="Must achieve >90 for FAANG/MAANG applications"
-            )
-            config.target_ats_score = target_ats
+            # Fixed optimal ATS score for FAANG/MAANG
+            config.target_ats_score = 92  # Optimized for best results
     
     # Show fabrication note
     if fabrication:
-        st.info("ℹ️ **Experience Enhancement is ON**: AI will generate plausible additional experience to better match the job requirements. You can disable this if you prefer to use only your real experience.")
+        st.info("ℹ️ **Experience Enhancement is ON**: AI will enhance existing bullet points to better match the job requirements. You can disable this if you prefer to use only your real experience.")
     
     return config
 
@@ -278,6 +271,8 @@ def main():
         st.session_state.tailored_resume = None
     if 'generation_config' not in st.session_state:
         st.session_state.generation_config = GenerationConfig()
+    if 'is_processing' not in st.session_state:
+        st.session_state.is_processing = False
     if 'ui_state' not in st.session_state:
         st.session_state.ui_state = UIState()
     if 'job_analysis' not in st.session_state:
@@ -458,23 +453,32 @@ def render_step_2_job_description():
         help="Include all requirements, responsibilities, and qualifications"
     )
     
+    # Check if already processing
+    is_already_processing = st.session_state.get('is_processing', False)
+    
     # Buttons
     col1, col2 = st.columns([1, 3])
     with col1:
         if st.button("← Back", use_container_width=True):
             st.session_state.step = 1
+            st.session_state.is_processing = False
             st.rerun()
     
     with col2:
-        tailor_clicked = st.button("🚀 Tailor Resume", type="primary", use_container_width=True)
+        # Show processing button if already processing
+        if is_already_processing:
+            tailor_clicked = st.button("🔄 Processing...", disabled=True, use_container_width=True)
+        else:
+            tailor_clicked = st.button("🚀 Tailor Resume", type="primary", use_container_width=True)
     
     # Animation container below both buttons
     animation_container = st.container()
     
-    if tailor_clicked:
+    if tailor_clicked and not is_already_processing:
         if not job_description.strip():
             st.warning("⚠️ Please enter a job description.")
         else:
+            st.session_state.is_processing = True
             with animation_container:
                 process_resume_tailoring(job_description, config)
 
