@@ -266,7 +266,7 @@ class ContentGenerator:
         job_analysis: JobAnalysis,
         ats_feedback: 'ATSScore',
         config: GenerationConfig,
-        retry_count: int = 1
+        retry_count: int = 1  # Track retry attempt for scoring boost
     ) -> TailoredResume:
         """
         Regenerate resume using Gemma's ATS feedback to fix shortcomings.
