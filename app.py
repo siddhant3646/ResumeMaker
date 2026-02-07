@@ -466,10 +466,16 @@ def render_step_2_job_description():
             st.rerun()
     
     with col2:
-        if st.button("🚀 Tailor Resume", type="primary", use_container_width=True):
-            if not job_description.strip():
-                st.warning("⚠️ Please enter a job description.")
-            else:
+        tailor_clicked = st.button("🚀 Tailor Resume", type="primary", use_container_width=True)
+    
+    # Animation container below both buttons
+    animation_container = st.container()
+    
+    if tailor_clicked:
+        if not job_description.strip():
+            st.warning("⚠️ Please enter a job description.")
+        else:
+            with animation_container:
                 process_resume_tailoring(job_description, config)
 
 
