@@ -582,6 +582,12 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 if job_analysis:
                     st.session_state.job_analysis = job_analysis
                 st.session_state.tailored_resume = tailored
+            else:
+                # Even if current score is not higher, save this attempt's results for next iteration
+                print(f"DEBUG: Not better score, but updating best_tailored for feedback")
+                if tailored:
+                    best_tailored = tailored
+                    st.session_state.tailored_resume = tailored
             
             # Store ATS feedback for next iteration
             previous_ats_feedback = tailored.ats_score if tailored else None
