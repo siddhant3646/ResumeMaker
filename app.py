@@ -134,8 +134,8 @@ def configure_page():
         initial_sidebar_state="collapsed"
     )
     
-    # Inject professional theme
-    inject_professional_theme()
+    # Inject modern theme
+    inject_modern_theme()
     
     # Hide sidebar completely
     st.markdown("""
