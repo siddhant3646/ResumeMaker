@@ -29,7 +29,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # Import new modules
-from ui.themes import theme
+from ui.themes import inject_modern_theme, get_modern_css, ModernTheme
 from ui.animations import animation_manager
 from core.models import (
     ParsedResume, TailoredResume, JobAnalysis, GenerationConfig,
@@ -60,7 +60,7 @@ except ImportError:
 # ============================================================================
 
 def configure_page():
-    """Configure Streamlit page with 2026 design standards"""
+    """Configure Streamlit page with ultra-modern 2026 design"""
     st.set_page_config(
         page_title="ResumeMaker AI",
         page_icon="🚀",
@@ -68,8 +68,8 @@ def configure_page():
         initial_sidebar_state="collapsed"
     )
     
-    # Inject 2026 theme CSS
-    theme.inject_css()
+    # Inject modern theme CSS
+    inject_modern_theme()
     
     # Hide sidebar completely
     st.markdown("""
@@ -88,15 +88,19 @@ def configure_page():
 def get_api_keys() -> Dict[str, str]:
     """Get API keys from secrets or environment"""
     try:
+        # Try to get from Streamlit secrets first
+        nvidia_key = st.secrets.get("nvidia", {}).get("nvidia_api_key", "nvapi-")
+        gemma_key = st.secrets.get("gemma", {}).get("gemma_api_key", "AIza")
+        
         return {
-            "nvidia": st.secrets.get("NVIDIA_API_KEY", ""),
-            "gemma": st.secrets.get("GEMMA_API_KEY", "")
+            "nvidia": nvidia_key,
+            "gemma": gemma_key
         }
     except:
         # Fallback for local development
         return {
-            "nvidia": "",
-            "gemma": ""
+            "nvidia": "nvapi-",
+            "gemma": "AIza"
         }
 
 
@@ -185,33 +189,45 @@ def main():
     if 'job_analysis' not in st.session_state:
         st.session_state.job_analysis = None
     
-    # Header
+    # Floating Stats
     st.markdown("""
-    <div style="text-align: center; padding: 2rem 0;">
-        <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">🚀 ResumeMaker AI</h1>
-        <p style="font-size: 1.2rem; color: #94a3b8;">
-            Intelligent Resume Tailoring with FAANG/MAANG ATS Optimization
-        </p>
+    <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
+        <div class="floating-stat magnetic-button">
+            <span>⚡</span>
+            <span><span class="value">STAR</span> Format</span>
+        </div>
+        <div class="floating-stat magnetic-button">
+            <span>🎯</span>
+            <span><span class="value">ATS</span> Score >90</span>
+        </div>
+        <div class="floating-stat magnetic-button">
+            <span>✨</span>
+            <span><span class="value">AI</span> Enhanced</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Step indicator
+    # Modern Hero Header
+    
+    # Modern Step Indicator
     current_step = st.session_state.step
-    step_dots = []
+    steps_html = []
     for i in range(1, 4):
+        step_class = ""
         if i < current_step:
-            step_dots.append(f'<span class="step-dot completed"></span>')
+            step_class = "completed"
         elif i == current_step:
-            step_dots.append(f'<span class="step-dot active"></span>')
-        else:
-            step_dots.append(f'<span class="step-dot"></span>')
+            step_class = "active"
+        
+        if i > 1:
+            line_class = "active" if i <= current_step else ""
+            steps_html.append(f'<div class="step-line {line_class}"></div>')
+        
+        steps_html.append(f'<div class="step-dot-modern {step_class}">{i}</div>')
     
     st.markdown(f"""
-    <div class="step-indicator">
-        {''.join(step_dots)}
-    </div>
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <span style="color: #94a3b8;">Step {current_step} of 3</span>
+    <div class="step-indicator-modern animate-fade-in-up" style="animation-delay: 0.2s;">
+        {''.join(steps_html)}
     </div>
     """, unsafe_allow_html=True)
     
@@ -225,19 +241,43 @@ def main():
 
 
 def render_step_1_upload():
-    """Step 1: Resume Upload"""
-    st.header("📄 Upload Your Resume")
+    """Step 1: Resume Upload with modern UI"""
     
+    # Bento Grid Layout
+    st.markdown('<div class="bento-grid">', unsafe_allow_html=True)
+    
+    # Morphing blobs for decoration
     st.markdown("""
-    Upload your master resume (PDF format). Our AI will analyze it and prepare to create 
-    a tailored version optimized for your target job.
-    """)
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden;">
+        <div class="blob" style="width: 400px; height: 400px; background: rgba(59, 130, 246, 0.3); top: 10%; left: -10%;"></div>
+        <div class="blob" style="width: 300px; height: 300px; background: rgba(139, 92, 246, 0.3); top: 60%; right: -5%; animation-delay: -5s;"></div>
+        <div class="blob" style="width: 250px; height: 250px; background: rgba(236, 72, 153, 0.2); bottom: 10%; left: 20%; animation-delay: -10s;"></div>
+    </div>
+    """, unsafe_allow_html=True)
     
+    # Main upload card with tilt effect
+    st.markdown("""
+    <div class="bento-item large tilt-card animate-fade-in-up" style="grid-column: 1 / -1;">
+        <div class="tilt-card-inner">
+            <h2 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; color: white;">
+                📄 Upload Your Resume
+            </h2>
+            <p style="color: #9ca3af; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem;">
+                Upload your master resume (PDF format). Our AI will analyze it and prepare to create 
+                a tailored version optimized for your target job.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Upload area with modern styling
     uploaded_file = st.file_uploader(
-        "Choose your resume PDF",
+        "",
         type=['pdf'],
         help="Upload your complete resume in PDF format"
     )
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # Close bento-grid
     
     if uploaded_file is not None:
         with st.spinner("📄 Parsing your resume..."):
@@ -518,7 +558,7 @@ def extract_text_from_pdf(uploaded_file) -> str:
 
 def parse_resume_with_gemma(resume_text: str, api_key: str) -> ParsedResume:
     """Parse resume using Gemma"""
-    from core.models import Basics, Education, Experience, Skills
+    from core.models import Basics, Education, Experience, Skills, Project
     
     try:
         import google.generativeai as genai
@@ -588,8 +628,6 @@ Return only valid JSON, no other text."""
             data = json.loads(json_match.group())
             
             # Convert to ParsedResume
-            from core.models import Basics, Education, Experience, Skills, Project
-            
             basics = Basics(**data.get('basics', {}))
             education = [Education(**edu) for edu in data.get('education', [])]
             experience = [Experience(**exp) for exp in data.get('experience', [])]
@@ -607,48 +645,60 @@ Return only valid JSON, no other text."""
         
     except Exception as e:
         print(f"Error parsing with Gemma: {e}")
-        # Fallback to mock
-        pass
     
-    # Fallback mock data
-    return ParsedResume(
-        basics=Basics(
-            name="Sample User",
-            email="user@example.com",
-            phone="",
-            location="",
-            links=[]
-        ),
-        education=[
-            Education(
-                institution="University",
-                studyType="B.Tech",
-                area="Computer Science",
-                startDate="Jun 2018",
-                endDate="May 2022",
-                location=""
-            )
-        ],
-        experience=[
-            Experience(
-                company="Tech Company",
-                role="Software Engineer",
-                startDate="Jun 2022",
-                endDate="Present",
-                location="",
-                bullets=[
-                    "Built scalable microservices",
-                    "Optimized database queries"
-                ]
-            )
-        ],
-        skills=Skills(
-            languages_frameworks=["Python", "Java", "React"],
-            tools=["AWS", "Docker", "Kubernetes"]
-        ),
-        projects=[],
-        achievements=[]
+    # Always return fallback data
+    basics = Basics(
+        name="Demo User",
+        email="demo@example.com",
+        phone="+1-555-0123",
+        location="San Francisco, CA",
+        links=["https://linkedin.com/in/demo", "https://github.com/demo"]
     )
+    
+    education = [
+        Education(
+            institution="University of California, Berkeley",
+            studyType="Bachelor of Science",
+            area="Computer Science",
+            startDate="2018-09",
+            endDate="2022-05",
+            location="Berkeley, CA"
+        )
+    ]
+    
+    experience = [
+        Experience(
+            company="Tech Corp",
+            role="Software Engineer",
+            startDate="2022-06",
+            endDate="Present",
+            location="San Francisco, CA",
+            bullets=["Developed scalable web applications", "Improved system performance by 40%"]
+        )
+    ]
+    
+    skills = Skills(
+        languages_frameworks=["Python", "JavaScript", "React"],
+        tools=["Docker", "AWS", "Git"]
+    )
+    
+    projects = [
+        Project(
+            name="AI Resume Builder",
+            techStack="Python, Streamlit, OpenAI",
+            description="Built an intelligent resume tailoring system"
+        )
+    ]
+    
+    return ParsedResume(
+        basics=basics,
+        education=education,
+        experience=experience,
+        skills=skills,
+        projects=projects,
+        achievements=["Led team of 5 engineers", "Reduced costs by 30%"]
+    )
+
 
 
 if __name__ == "__main__":
