@@ -1,0 +1,464 @@
+"""
+FAANG/MAANG Bullet Generation and Experience Fabrication Engine
+Generates optimized resume bullets using STAR/XYZ format with realistic metrics
+"""
+
+import json
+import re
+import random
+from typing import List, Dict, Optional
+from core.models import Experience, Project, SeniorityLevel, Industry, ParsedResume
+
+
+class FAANGBulletGenerator:
+    """Generate ATS-optimized bullets using FAANG/MAANG standards"""
+    
+    # Tier 1 Action Verbs (Leadership/Impact)
+    TIER_1_VERBS = [
+        "Architected", "Spearheaded", "Pioneered", "Orchestrated", "Championed",
+        "Directed", "Drove", "Led", "Headed", "Strategized"
+    ]
+    
+    # Tier 2 Action Verbs (Creation/Innovation)
+    TIER_2_VERBS = [
+        "Engineered", "Designed", "Built", "Implemented", "Developed", "Launched",
+        "Created", "Established", "Deployed", "Delivered", "Crafted"
+    ]
+    
+    # Tier 3 Action Verbs (Optimization/Improvement)
+    TIER_3_VERBS = [
+        "Optimized", "Refactored", "Enhanced", "Streamlined", "Accelerated",
+        "Improved", "Upgraded", "Modernized", "Transformed", "Revamped"
+    ]
+    
+    # Realistic FAANG-scale metrics templates
+    METRIC_TEMPLATES = {
+        'scale': [
+            "serving {scale}M+ daily active users",
+            "handling {scale}M+ requests per day",
+            "processing {scale}TB+ of data daily",
+            "supporting {scale}K+ concurrent users",
+            "managing {scale}M+ records"
+        ],
+        'performance': [
+            "reduced latency by {pct}% (from {before}ms to {after}ms)",
+            "improved throughput by {pct}% ({before} RPS to {after} RPS)",
+            "decreased response time by {pct}%",
+            "optimized performance by {pct}%",
+            "increased efficiency by {pct}%"
+        ],
+        'reliability': [
+            "improved uptime to {pct}%",
+            "reduced error rate by {pct}%",
+            "achieved {pct}% test coverage",
+            "decreased downtime by {pct}%"
+        ],
+        'business': [
+            "saved ${amount}K annually in infrastructure costs",
+            "increased revenue by {pct}%",
+            "reduced operational costs by {pct}%",
+            "accelerated delivery by {time}%"
+        ],
+        'impact': [
+            "adopted by {scale}+ teams across the organization",
+            "used by {scale}K+ developers",
+            "deployed to {scale}+ production services",
+            "impacting {scale}M+ end users"
+        ]
+    }
+    
+    # Realistic metric ranges for different seniority levels
+    METRIC_RANGES = {
+        SeniorityLevel.ENTRY: {
+            'scale': (10, 100),
+            'pct': (10, 30),
+            'amount': (10, 50),
+            'time': (10, 25)
+        },
+        SeniorityLevel.JUNIOR: {
+            'scale': (50, 500),
+            'pct': (15, 40),
+            'amount': (25, 100),
+            'time': (15, 35)
+        },
+        SeniorityLevel.MID: {
+            'scale': (100, 1000),
+            'pct': (20, 50),
+            'amount': (50, 200),
+            'time': (20, 40)
+        },
+        SeniorityLevel.SENIOR: {
+            'scale': (500, 5000),
+            'pct': (30, 60),
+            'amount': (100, 500),
+            'time': (25, 50)
+        },
+        SeniorityLevel.STAFF: {
+            'scale': (1000, 10000),
+            'pct': (40, 70),
+            'amount': (200, 1000),
+            'time': (30, 60)
+        },
+        SeniorityLevel.PRINCIPAL: {
+            'scale': (5000, 50000),
+            'pct': (50, 80),
+            'amount': (500, 5000),
+            'time': (40, 70)
+        }
+    }
+    
+    # Technical context templates
+    TECH_CONTEXTS = {
+        'backend': [
+            "RESTful APIs", "microservices", "distributed systems", "event-driven architecture",
+            "serverless functions", "GraphQL APIs", "gRPC services", "message queues"
+        ],
+        'frontend': [
+            "React components", "Vue.js applications", "Angular modules", "responsive UI",
+            "design system", "component library", "single-page applications", "progressive web apps"
+        ],
+        'devops': [
+            "CI/CD pipelines", "container orchestration", "infrastructure as code",
+            "monitoring systems", "deployment automation", "cloud infrastructure"
+        ],
+        'data': [
+            "data pipelines", "ETL processes", "real-time analytics", "data warehouse",
+            "stream processing", "machine learning models"
+        ],
+        'mobile': [
+            "iOS applications", "Android apps", "cross-platform solutions",
+            "mobile SDKs", "React Native apps"
+        ]
+    }
+    
+    def __init__(self, gemma_api_key: str):
+        """Initialize with Gemma API"""
+        self.api_key = gemma_api_key
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=gemma_api_key)
+            self.model = genai.GenerativeModel('gemma-3-27b-it')
+            self.available = True
+        except Exception:
+            self.available = False
+            self.model = None
+    
+    def generate_optimized_bullet(
+        self,
+        skill: str,
+        jd_keywords: List[str],
+        user_tech_stack: List[str],
+        seniority_level: SeniorityLevel,
+        focus_area: str = "backend"
+    ) -> str:
+        """
+        Generate a STAR-formatted bullet with quantified metrics
+        Uses AI for generation with structured prompting
+        """
+        if self.available and self.model:
+            return self._ai_generate_bullet(skill, jd_keywords, user_tech_stack, seniority_level, focus_area)
+        else:
+            return self._template_generate_bullet(skill, seniority_level, focus_area)
+    
+    def _ai_generate_bullet(
+        self,
+        skill: str,
+        jd_keywords: List[str],
+        user_tech_stack: List[str],
+        seniority_level: SeniorityLevel,
+        focus_area: str
+    ) -> str:
+        """Use AI to generate optimized bullet"""
+        
+        # Select appropriate verbs based on seniority
+        if seniority_level in [SeniorityLevel.SENIOR, SeniorityLevel.STAFF, SeniorityLevel.PRINCIPAL]:
+            verb_pool = self.TIER_1_VERBS + self.TIER_2_VERBS[:5]
+        elif seniority_level in [SeniorityLevel.MID]:
+            verb_pool = self.TIER_2_VERBS + self.TIER_3_VERBS[:5]
+        else:
+            verb_pool = self.TIER_2_VERBS + self.TIER_3_VERBS
+        
+        verb = random.choice(verb_pool)
+        
+        # Get realistic metrics
+        metrics = self._generate_realistic_metrics(seniority_level)
+        
+        prompt = f"""Generate a resume bullet point using STAR method.
+
+Context:
+- Skill: {skill}
+- Seniority: {seniority_level.value}
+- Focus Area: {focus_area}
+- Action Verb: {verb}
+- User's Tech Stack: {', '.join(user_tech_stack[:5])}
+- JD Keywords to Include: {', '.join(jd_keywords[:3])}
+- Metrics: {metrics}
+
+Requirements:
+1. Use the action verb: {verb}
+2. Follow STAR format (implied Situation/Task, explicit Action, quantified Result)
+3. Include at least ONE specific metric (percentage, scale, time, cost)
+4. Mention 1-2 technologies from the user's tech stack
+5. Include 1-2 keywords from the job description
+6. Keep under 30 words, maximum 2 lines
+7. Be specific and technical
+8. Use realistic FAANG-scale metrics
+
+Generate ONLY the bullet point text, nothing else:
+"""
+        
+        try:
+            response = self.model.generate_content(prompt)
+            bullet = response.text.strip()
+            
+            # Clean up the bullet
+            bullet = self._clean_bullet(bullet)
+            
+            # Ensure it has metrics
+            if not self._has_metrics(bullet):
+                bullet = self._add_metrics_to_bullet(bullet, metrics)
+            
+            return bullet
+            
+        except Exception as e:
+            print(f"AI generation error: {e}")
+            return self._template_generate_bullet(skill, seniority_level, focus_area)
+    
+    def _template_generate_bullet(self, skill: str, seniority_level: SeniorityLevel, focus_area: str) -> str:
+        """Fallback template-based generation"""
+        # Select verb
+        if seniority_level in [SeniorityLevel.SENIOR, SeniorityLevel.STAFF, SeniorityLevel.PRINCIPAL]:
+            verb = random.choice(self.TIER_1_VERBS)
+        else:
+            verb = random.choice(self.TIER_2_VERBS)
+        
+        # Get metrics
+        metrics = self._generate_realistic_metrics(seniority_level)
+        
+        # Get tech context
+        contexts = self.TECH_CONTEXTS.get(focus_area, self.TECH_CONTEXTS['backend'])
+        context = random.choice(contexts)
+        
+        # Build bullet
+        scale_metric = random.choice(self.METRIC_TEMPLATES['scale']).format(**metrics)
+        perf_metric = random.choice(self.METRIC_TEMPLATES['performance']).format(**metrics)
+        
+        bullet = f"{verb} scalable {skill}-based {context} {scale_metric}, {perf_metric}"
+        
+        return self._clean_bullet(bullet)
+    
+    def _generate_realistic_metrics(self, seniority_level: SeniorityLevel) -> Dict:
+        """Generate realistic metrics based on seniority"""
+        ranges = self.METRIC_RANGES.get(seniority_level, self.METRIC_RANGES[SeniorityLevel.MID])
+        
+        scale = random.randint(*ranges['scale'])
+        pct = random.randint(*ranges['pct'])
+        amount = random.randint(*ranges['amount'])
+        
+        # Calculate before/after for performance metrics
+        before = random.randint(100, 1000)
+        after = int(before * (1 - pct / 100))
+        
+        return {
+            'scale': scale,
+            'pct': pct,
+            'amount': amount,
+            'before': before,
+            'after': after,
+            'time': random.randint(*ranges['time'])
+        }
+    
+    def _clean_bullet(self, bullet: str) -> str:
+        """Clean and format bullet point"""
+        # Remove bullet markers
+        bullet = re.sub(r'^[\s•\-\*]+', '', bullet)
+        
+        # Ensure proper capitalization
+        bullet = bullet[0].upper() + bullet[1:] if bullet else bullet
+        
+        # Ensure period at end
+        if bullet and not bullet.endswith('.'):
+            bullet += '.'
+        
+        # Limit length
+        words = bullet.split()
+        if len(words) > 30:
+            bullet = ' '.join(words[:30]) + '.'
+        
+        return bullet.strip()
+    
+    def _has_metrics(self, bullet: str) -> bool:
+        """Check if bullet has quantified metrics"""
+        patterns = [
+            r'\d+%',  # Percentage
+            r'\d+K?',  # Numbers with optional K
+            r'\d+M',  # Millions
+            r'\$\d+',  # Dollar amounts
+            r'\d+ms',  # Milliseconds
+            r'\d+RPS',  # Requests per second
+        ]
+        return any(re.search(pattern, bullet) for pattern in patterns)
+    
+    def _add_metrics_to_bullet(self, bullet: str, metrics: Dict) -> str:
+        """Add metrics to bullet if missing"""
+        metric_phrase = random.choice([
+            f" improving efficiency by {metrics['pct']}%",
+            f" serving {metrics['scale']}K+ users",
+            f" reducing latency by {metrics['pct']}%"
+        ])
+        
+        # Insert before period
+        if bullet.endswith('.'):
+            bullet = bullet[:-1] + metric_phrase + '.'
+        else:
+            bullet += metric_phrase
+        
+        return bullet
+    
+    def apply_xyz_formula(self, bullet: str, context: Dict) -> str:
+        """
+        Convert bullet to XYZ format:
+        Accomplished [X] as measured by [Y], by doing [Z]
+        """
+        # This is typically applied during the generation phase
+        # But can be used to restructure existing bullets
+        return bullet
+    
+    def enhance_existing_bullet(
+        self,
+        bullet: str,
+        seniority_level: SeniorityLevel,
+        jd_keywords: List[str]
+    ) -> str:
+        """
+        Enhance an existing bullet with better metrics and keywords
+        """
+        if self._has_metrics(bullet) and any(kw in bullet.lower() for kw in jd_keywords):
+            return bullet  # Already good
+        
+        # Add metrics if missing
+        if not self._has_metrics(bullet):
+            metrics = self._generate_realistic_metrics(seniority_level)
+            bullet = self._add_metrics_to_bullet(bullet, metrics)
+        
+        # Strengthen action verb
+        for tier_3 in self.TIER_3_VERBS:
+            if bullet.lower().startswith(tier_3.lower()):
+                # Upgrade to tier 2
+                new_verb = random.choice(self.TIER_2_VERBS)
+                bullet = new_verb + bullet[len(tier_3):]
+                break
+        
+        return self._clean_bullet(bullet)
+
+
+class ExperienceFabricator:
+    """Generate plausible experience to fill gaps"""
+    
+    def __init__(self, gemma_api_key: str, enabled: bool = True):
+        self.enabled = enabled
+        self.bullet_generator = FAANGBulletGenerator(gemma_api_key)
+    
+    def fabricate_experience_entry(
+        self,
+        skill: str,
+        user_context: Dict,
+        company_context: Dict,
+        seniority_level: SeniorityLevel
+    ) -> Experience:
+        """
+        Generate a plausible experience entry
+        Creates realistic company name, role, and achievements
+        """
+        # Generate plausible company name (generic or based on context)
+        company_types = {
+            'tech': ['Tech', 'Digital', 'Cloud', 'Data', 'AI', 'Systems'],
+            'finance': ['Capital', 'Financial', 'Invest', 'Bank', 'Wealth'],
+            'healthcare': ['Health', 'Med', 'Bio', 'Care', 'Life Sciences']
+        }
+        
+        industry = company_context.get('industry', 'tech')
+        suffix = random.choice(company_types.get(industry, company_types['tech']))
+        company_name = f"{user_context.get('location', 'Global')} {suffix} Solutions"
+        
+        # Generate role title
+        role_prefix = "Senior" if seniority_level in [SeniorityLevel.SENIOR, SeniorityLevel.STAFF] else ""
+        role = f"{role_prefix} {skill.title()} Engineer" if role_prefix else f"{skill.title()} Engineer"
+        
+        # Generate bullets
+        bullets = []
+        for _ in range(random.randint(3, 5)):
+            bullet = self.bullet_generator.generate_optimized_bullet(
+                skill=skill,
+                jd_keywords=company_context.get('jd_keywords', []),
+                user_tech_stack=user_context.get('tech_stack', []),
+                seniority_level=seniority_level,
+                focus_area=company_context.get('focus_area', 'backend')
+            )
+            bullets.append(bullet)
+        
+        return Experience(
+            company=company_name,
+            role=role,
+            startDate="Jun 2020",  # Plausible dates
+            endDate="Dec 2021",
+            location=user_context.get('location', 'Remote'),
+            bullets=bullets,
+            is_fabricated=True
+        )
+    
+    def fabricate_project(
+        self,
+        required_skills: List[str],
+        user_skills: List[str],
+        company_type: str
+    ) -> Project:
+        """Generate a plausible project"""
+        # Project name
+        project_types = [
+            "Platform", "Engine", "Hub", "Framework", "Toolkit",
+            "System", "Infrastructure", "Service", "Gateway", "Orchestrator"
+        ]
+        
+        skill = random.choice(required_skills[:3] if required_skills else ["microservices"])
+        project_name = f"{skill.title()} {random.choice(project_types)}"
+        
+        # Tech stack (mix of user skills and required skills)
+        stack_skills = list(set(user_skills[:5] + required_skills[:3]))
+        tech_stack = ', '.join(stack_skills[:6])
+        
+        # Description
+        descriptions = [
+            f"Designed and implemented scalable {skill} architecture handling high-throughput scenarios",
+            f"Built distributed {skill} system with focus on reliability and performance",
+            f"Developed enterprise-grade {skill} solution adopted across multiple teams"
+        ]
+        description = random.choice(descriptions)
+        
+        return Project(
+            name=project_name,
+            techStack=tech_stack,
+            description=description,
+            is_fabricated=True
+        )
+    
+    def generate_additional_bullets_for_existing_experience(
+        self,
+        existing_exp: Experience,
+        missing_skills: List[str],
+        seniority_level: SeniorityLevel
+    ) -> List[str]:
+        """Generate additional bullets for existing experience to cover missing skills"""
+        new_bullets = []
+        
+        for skill in missing_skills[:3]:  # Limit to top 3 missing skills
+            bullet = self.bullet_generator.generate_optimized_bullet(
+                skill=skill,
+                jd_keywords=[skill],
+                user_tech_stack=[],  # Not needed for enhancement
+                seniority_level=seniority_level,
+                focus_area="backend"
+            )
+            new_bullets.append(bullet)
+        
+        return new_bullets
