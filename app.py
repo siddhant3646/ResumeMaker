@@ -560,14 +560,26 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 print(f"DEBUG: Attempt {attempt} - best_tailored: {bool(best_tailored)}, previous_ats_feedback: {bool(previous_ats_feedback)}, job_analysis: {bool(job_analysis)}")
                 if best_tailored and previous_ats_feedback and job_analysis:
                     print(f"DEBUG: Calling regenerate_with_feedback...")
-                    tailored = content_gen.regenerate_with_feedback(
-                        previous_resume=best_tailored,
-                        original_resume=resume,
-                        job_analysis=job_analysis,
-                        ats_feedback=previous_ats_feedback,
-                        config=config,
-                        retry_count=attempt
-                    )
+                    try:
+                        # Try with retry_count parameter (new version)
+                        tailored = content_gen.regenerate_with_feedback(
+                            previous_resume=best_tailored,
+                            original_resume=resume,
+                            job_analysis=job_analysis,
+                            ats_feedback=previous_ats_feedback,
+                            config=config,
+                            retry_count=attempt
+                        )
+                    except TypeError:
+                        # Fallback to old version without retry_count
+                        print("DEBUG: Using fallback without retry_count")
+                        tailored = content_gen.regenerate_with_feedback(
+                            previous_resume=best_tailored,
+                            original_resume=resume,
+                            job_analysis=job_analysis,
+                            ats_feedback=previous_ats_feedback,
+                            config=config
+                        )
                 else:
                     # Fallback: continue with previous best
                     print(f"DEBUG: Using fallback - best_tailored: {bool(best_tailored)}")
