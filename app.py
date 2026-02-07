@@ -429,7 +429,7 @@ def tailor_resume_with_nvidia(
     payload = {
         "model": "moonshotai/kimi-k2.5",
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "temperature": 0.3,
         "top_p": 0.9,
         "stream": stream
@@ -499,6 +499,19 @@ def tailor_resume_with_nvidia(
             
             if not response_text:
                 raise ValueError("Empty response from tailoring API")
+            
+            # Validate JSON is complete (not truncated)
+            response_text = response_text.strip()
+            if not (response_text.startswith('{') and response_text.endswith('}')):
+                add_log(f"Warning: Response appears truncated ({len(response_text)} chars)", "warning")
+                # Try to find complete JSON object
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    response_text = response_text[start_idx:end_idx+1]
+                    add_log("Extracted valid JSON object from response", "info")
+                else:
+                    raise ValueError("Response appears to be truncated. Try with a shorter job description or resume.")
             
             final_time = time.time() - start_time
             add_log(f"Tailored resume: {len(response_text)} chars (Total: {final_time:.1f}s)", "success")
@@ -843,7 +856,7 @@ def main():
         with st.container():
             st.markdown("<div class='step-container'>", unsafe_allow_html=True)
             st.subheader("💼 Job Description")
-            st.write("Paste the job description you're applying for. Our AI will tailor your resume to match using Kimi k2.5 via NVIDIA.")
+            st.write("Paste the job description you're applying for. Our AI will tailor your resume to match.")
             
             job_description = st.text_area(
                 "Job Description",
