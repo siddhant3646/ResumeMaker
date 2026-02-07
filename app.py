@@ -557,7 +557,9 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 )
             else:
                 # Retry: use regenerate_with_feedback with shortcomings from Gemma
+                print(f"DEBUG: Attempt {attempt} - best_tailored: {bool(best_tailored)}, previous_ats_feedback: {bool(previous_ats_feedback)}, job_analysis: {bool(job_analysis)}")
                 if best_tailored and previous_ats_feedback and job_analysis:
+                    print(f"DEBUG: Calling regenerate_with_feedback...")
                     tailored = content_gen.regenerate_with_feedback(
                         previous_resume=best_tailored,
                         original_resume=resume,
@@ -567,6 +569,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                     )
                 else:
                     # Fallback: continue with previous best
+                    print(f"DEBUG: Using fallback - best_tailored: {bool(best_tailored)}")
                     tailored = best_tailored or tailored
             
             # Track best result
