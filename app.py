@@ -829,6 +829,7 @@ def parse_resume_with_gemma(resume_text: str, api_key: str) -> ParsedResume:
     """Parse resume using Gemma"""
     from core.models import Basics, Education, Experience, Skills, Project
     
+    # Initialize model
     try:
         from google.generativeai.generative_models import GenerativeModel
         import google.generativeai as genai
@@ -840,57 +841,60 @@ def parse_resume_with_gemma(resume_text: str, api_key: str) -> ParsedResume:
     except Exception as e:
         print(f"Gemma initialization error: {e}")
         model = None
-        
+    
+    # Generate prompt
     prompt = f"""Parse this resume text and extract structured information.
 
-Resume Text:
-{resume_text[:4000]}
+ Resume Text:
+ {resume_text[:4000]}
 
-Extract and return JSON with this structure:
-{{
-    "basics": {{
-        "name": "full name",
-        "email": "email address",
-        "phone": "phone number",
-        "location": "city, country",
-        "links": ["linkedin", "github"]
-    }},
-    "education": [
-        {{
-            "institution": "school name",
-            "studyType": "degree",
-            "area": "field of study",
-            "startDate": "start date",
-            "endDate": "end date",
-            "location": "location"
-        }}
-    ],
-    "experience": [
-        {{
-            "company": "company name",
-            "role": "job title",
-            "startDate": "start date",
-            "endDate": "end date or Present",
-            "location": "location",
-            "bullets": ["achievement 1", "achievement 2"]
-        }}
-    ],
-    "skills": {{
-        "languages_frameworks": ["python", "java", "react"],
-        "tools": ["docker", "aws"]
-    }},
-    "projects": [
-        {{
-            "name": "project name",
-            "techStack": "technologies used",
-            "description": "brief description"
-        }}
-    ],
-    "achievements": ["achievement 1", "achievement 2"]
-}}
+ Extract and return JSON with this structure:
+ {{
+     "basics": {{
+         "name": "full name",
+         "email": "email address",
+         "phone": "phone number",
+         "location": "city, country",
+         "links": ["linkedin", "github"]
+     }},
+     "education": [
+         {{
+             "institution": "school name",
+             "studyType": "degree",
+             "area": "field of study",
+             "startDate": "start date",
+             "endDate": "end date",
+             "location": "location"
+         }}
+     ],
+     "experience": [
+         {{
+             "company": "company name",
+             "role": "job title",
+             "startDate": "start date",
+             "endDate": "end date or Present",
+             "location": "location",
+             "bullets": ["achievement 1", "achievement 2"]
+         }}
+     ],
+     "skills": {{
+         "languages_frameworks": ["python", "java", "react"],
+         "tools": ["docker", "aws"]
+     }},
+     "projects": [
+         {{
+             "name": "project name",
+             "techStack": "technologies used",
+             "description": "brief description"
+         }}
+     ],
+     "achievements": ["achievement 1", "achievement 2"]
+ }}
 
  Return only valid JSON, no other text."""
-        
+    
+    # Try to parse using model
+    try:
         if model:
             response = model.generate_content(prompt)
             
@@ -932,6 +936,49 @@ Extract and return JSON with this structure:
         
     except Exception as e:
         print(f"Error parsing with Gemma: {e}")
+    
+    # Always return fallback data if everything failed
+    return ParsedResume(
+        basics=Basics(
+            name="Demo User",
+            email="demo@example.com",
+            phone="+1-555-0123",
+            location="San Francisco, CA",
+            links=["https://linkedin.com/in/demo", "https://github.com/demo"]
+        ),
+        education=[
+            Education(
+                institution="University of California, Berkeley",
+                studyType="Bachelor of Science",
+                area="Computer Science",
+                startDate="2018-09",
+                endDate="2022-05",
+                location="Berkeley, CA"
+            )
+        ],
+        experience=[
+            Experience(
+                company="Tech Corp",
+                role="Software Engineer",
+                startDate="2022-06",
+                endDate="Present",
+                location="San Francisco, CA",
+                bullets=["Developed scalable applications", "Optimized performance by 40%"]
+            )
+        ],
+        skills=Skills(
+            languages_frameworks=["Python", "JavaScript", "React"],
+            tools=["Docker", "AWS", "Git"]
+        ),
+        projects=[
+            Project(
+                name="Resume Builder",
+                techStack="Python, Streamlit, AI",
+                description="Built an AI-powered resume optimization tool"
+            )
+        ],
+        achievements=["Best Project Award 2023"]
+    )
     
     # Always return fallback data
     basics = Basics(
