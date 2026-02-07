@@ -452,9 +452,26 @@ Return a JSON array of improved bullets:
         
         # Add missing keywords to skills
         if improved.skills and ats_feedback.missing_keywords:
+            added_keywords = []
             for kw in ats_feedback.missing_keywords:
-                if kw.lower() not in [s.lower() for s in improved.skills.languages_frameworks + improved.skills.tools]:
-                    improved.skills.tools.append(kw)
+                kw_lower = kw.lower()
+                existing_skills = [s.lower() for s in improved.skills.languages_frameworks + improved.skills.tools]
+                
+                if kw_lower not in existing_skills:
+                    # Add to appropriate category
+                    if any(tech in kw_lower for tech in ['python', 'java', 'javascript', 'typescript', 'react', 'node', 'angular']):
+                        if kw_lower not in [s.lower() for s in improved.skills.languages_frameworks]:
+                            improved.skills.languages_frameworks.append(kw)
+                            added_keywords.append(kw)
+                    else:
+                        if kw_lower not in [s.lower() for s in improved.skills.tools]:
+                            improved.skills.tools.append(kw)
+                            added_keywords.append(kw)
+            
+            if added_keywords:
+                print(f"DEBUG: Added keywords to skills: {added_keywords}")
+            else:
+                print(f"DEBUG: No new keywords added (already present)")
         
         # Replace weak bullets with improved ones
         bullet_idx = 0
@@ -463,16 +480,30 @@ Return a JSON array of improved bullets:
         # Debug: Print what we're working with
         print(f"DEBUG: Weak bullets to replace: {ats_feedback.weak_bullets[:3]}")
         print(f"DEBUG: Improved bullets available: {improved_bullets[:3]}")
+        print(f"DEBUG: Missing keywords to add: {ats_feedback.missing_keywords[:5]}")
         
         for exp in improved.experience:
             new_bullets = []
             for bullet in exp.bullets:
                 if bullet.lower().strip() in weak_set and bullet_idx < len(improved_bullets):
+                    # Replace with improved bullet
                     new_bullets.append(improved_bullets[bullet_idx])
                     print(f"DEBUG: Replaced bullet: {bullet[:50]}... -> {improved_bullets[bullet_idx][:50]}...")
                     bullet_idx += 1
                 else:
+                    # Keep original bullet
                     new_bullets.append(bullet)
+            
+            # Debug: Check if we actually added missing keywords
+            old_text = " ".join(exp.bullets).lower()
+            new_text = " ".join(new_bullets).lower()
+            
+            for kw in ats_feedback.missing_keywords[:3]:
+                if kw.lower() in new_text:
+                    print(f"DEBUG: SUCCESS: Added missing keyword '{kw}'")
+                else:
+                    print(f"DEBUG: MISSING: Keyword '{kw}' not found")
+                    
             exp.bullets = new_bullets
         
         # If we have extra improved bullets, add them to first experience
