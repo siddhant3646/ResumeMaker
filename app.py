@@ -565,7 +565,8 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                         original_resume=resume,
                         job_analysis=job_analysis,
                         ats_feedback=previous_ats_feedback,
-                        config=config
+                        config=config,
+                        retry_count=attempt
                     )
                 else:
                     # Fallback: continue with previous best

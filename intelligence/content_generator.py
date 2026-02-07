@@ -32,6 +32,16 @@ class ContentGenerator:
         self.ats_scorer = ATSScorer(gemma_api_key)
         self.skills_analyzer = SkillsGapAnalyzer()
         self.page_manager = PageManager()
+        
+        # Initialize hybrid scorer for better scoring
+        try:
+            from intelligence.hybrid_ats_scorer import HybridATSScorer
+            self.hybrid_scorer = HybridATSScorer(gemma_api_key)
+            self.use_hybrid_scoring = True
+            print("DEBUG: Hybrid ATS scorer initialized successfully")
+        except ImportError:
+            self.use_hybrid_scoring = False
+            print("DEBUG: Hybrid scorer not available, using AI scorer only")
     
     def generate_tailored_resume(
         self,
@@ -139,7 +149,12 @@ class ContentGenerator:
             tailored.summary = self._generate_summary(tailored, job_analysis)
         
         # Calculate ATS score
-        tailored.ats_score = self.ats_scorer.calculate_score(tailored, job_analysis)
+        print(f"DEBUG: Calculating ATS score using {'hybrid' if self.use_hybrid_scoring else 'AI'} scorer")
+        if self.use_hybrid_scoring and hasattr(self, 'hybrid_scorer'):
+            tailored.ats_score = self.hybrid_scorer.calculate_score(tailored, job_analysis)
+            print(f"DEBUG: Hybrid score calculated: {tailored.ats_score.overall}")
+        else:
+            tailored.ats_score = self.ats_scorer.calculate_score(tailored, job_analysis)
         
         return tailored
     
@@ -250,7 +265,8 @@ class ContentGenerator:
         original_resume: ParsedResume,
         job_analysis: JobAnalysis,
         ats_feedback: 'ATSScore',
-        config: GenerationConfig
+        config: GenerationConfig,
+        retry_count: int = 1
     ) -> TailoredResume:
         """
         Regenerate resume using Gemma's ATS feedback to fix shortcomings.
@@ -313,11 +329,16 @@ Return a JSON array of improved bullets:
             )
             
             # Recalculate ATS score
-            print(f"DEBUG: Recalculating ATS score for improved resume")
-            improved_resume.ats_score = self.ats_scorer.calculate_score(
-                improved_resume, job_analysis
-            )
-            print(f"DEBUG: New ATS score: {improved_resume.ats_score.overall if improved_resume.ats_score else 'None'}")
+            print(f"DEBUG: Regeneration - Calculating ATS score using {'hybrid' if self.use_hybrid_scoring else 'AI'} scorer (retry {retry_count})")
+            if self.use_hybrid_scoring and hasattr(self, 'hybrid_scorer'):
+                improved_resume.ats_score = self.hybrid_scorer.calculate_score(
+                    improved_resume, job_analysis, retry_count=retry_count
+                )
+                print(f"DEBUG: Hybrid regeneration score: {improved_resume.ats_score.overall}")
+            else:
+                improved_resume.ats_score = self.ats_scorer.calculate_score(
+                    improved_resume, job_analysis
+                )
             
             improved_resume.fabrication_notes.append(
                 f"Regenerated with ATS feedback. Previous score: {ats_feedback.overall}"
