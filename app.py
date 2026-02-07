@@ -488,7 +488,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
     api_keys = get_api_keys()
     
     if not api_keys["gemma"] or not api_keys["nvidia"]:
-        st.error("⚠️ API keys not configured. Please set up NVIDIA and Gemma API keys.")
+        st.error("⚠️ API keys not configured. Please set up your API keys in the configuration.")
         return
     
     # Create placeholders for dynamic updates
@@ -496,7 +496,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
     progress_bar = st.progress(0.05)
     info_placeholder = st.empty()
     
-    MAX_ATTEMPTS = 3
+    MAX_ATTEMPTS = 10
     
     # Stage 1: Initializing
     status_placeholder.markdown(
@@ -525,6 +525,8 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         best_tailored = None
         best_score = 0
         previous_ats_feedback = None
+        job_analysis = None
+        tailored = None
         
         for attempt in range(1, MAX_ATTEMPTS + 1):
             # Stage 3: Analyzing/Generating
@@ -545,7 +547,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 else:
                     info_placeholder.info(f"🔄 Attempt {attempt}/{MAX_ATTEMPTS} - Optimizing to reach target ATS score of {config.target_ats_score}...")
             
-            progress_bar.progress(0.25 + (attempt - 1) * 0.2)
+            progress_bar.progress(0.15 + (attempt - 1) * 0.17)
             
             # Generate or regenerate tailored resume
             if attempt == 1:
@@ -555,38 +557,77 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 )
             else:
                 # Retry: use regenerate_with_feedback with shortcomings from Gemma
-                tailored = content_gen.regenerate_with_feedback(
-                    previous_resume=best_tailored,
-                    original_resume=resume,
-                    job_analysis=job_analysis,
-                    ats_feedback=previous_ats_feedback,
-                    config=config
-                )
+                if best_tailored and previous_ats_feedback and job_analysis:
+                    tailored = content_gen.regenerate_with_feedback(
+                        previous_resume=best_tailored,
+                        original_resume=resume,
+                        job_analysis=job_analysis,
+                        ats_feedback=previous_ats_feedback,
+                        config=config
+                    )
+                else:
+                    # Fallback: continue with previous best
+                    tailored = best_tailored or tailored
             
             # Track best result
-            current_score = tailored.ats_score.overall if tailored.ats_score else 0
-            if current_score > best_score:
+            current_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0
+            if current_score > best_score and tailored:
                 best_score = current_score
                 best_tailored = tailored
-                st.session_state.job_analysis = job_analysis
+                if job_analysis:
+                    st.session_state.job_analysis = job_analysis
                 st.session_state.tailored_resume = tailored
             
             # Store ATS feedback for next iteration
-            previous_ats_feedback = tailored.ats_score
+            previous_ats_feedback = tailored.ats_score if tailored else None
             
-            # Show ATS score
-            if tailored.ats_score:
-                progress_bar.progress(0.4 + attempt * 0.15)
+            # Show ATS score with real-time UI
+            if tailored and tailored.ats_score:
+                # Update progress based on best score
+                score_progress = min(best_score / 100, 0.9)
+                progress_bar.progress(score_progress)
+                
+                # Real-time scoring metrics
+                score_col1, score_col2, score_col3 = st.columns(3)
+                
+                with score_col1:
+                    delta = tailored.ats_score.overall - best_score if attempt > 1 else None
+                    st.metric(
+                        label="🎯 Current ATS Score",
+                        value=f"{tailored.ats_score.overall}/100",
+                        delta=f"{delta:+d}" if delta else None
+                    )
+                
+                with score_col2:
+                    st.metric(
+                        label="📈 Best Score So Far",
+                        value=f"{best_score}/100"
+                    )
+                
+                with score_col3:
+                    st.metric(
+                        label="🔄 Attempts Remaining",
+                        value=f"{MAX_ATTEMPTS - attempt}"
+                    )
+                
+                # Score breakdown in expander
+                with st.expander("📊 Score Breakdown", expanded=True):
+                    cols = st.columns(4)
+                    cols[0].metric("Keywords", f"{tailored.ats_score.keyword_match}%")
+                    cols[1].metric("STAR Format", f"{tailored.ats_score.star_compliance}%")
+                    cols[2].metric("Quantification", f"{tailored.ats_score.quantification}%")
+                    cols[3].metric("Action Verbs", f"{tailored.ats_score.action_verb_strength}%")
+                
+                # Show feedback for next iteration
+                if tailored.ats_score.overall < config.target_ats_score:
+                    if tailored.ats_score.missing_keywords:
+                        st.info(f"🔍 Missing Keywords to Add: {', '.join(tailored.ats_score.missing_keywords[:5])}")
+                    if tailored.ats_score.shortcomings:
+                        st.warning(f"⚠️ Issues to Fix: {', '.join(tailored.ats_score.shortcomings[:3])}")
+                
+                # Show current animation
                 status_placeholder.markdown(
-                    animation_manager.get_ats_score_card(
-                        tailored.ats_score.overall,
-                        {
-                            'star_compliance': tailored.ats_score.star_compliance,
-                            'quantification': tailored.ats_score.quantification,
-                            'keyword_match': tailored.ats_score.keyword_match,
-                            'action_verbs': tailored.ats_score.action_verb_strength
-                        }
-                    ),
+                    animation_manager.get_stage_html('generating', attempt=attempt),
                     unsafe_allow_html=True
                 )
                 
@@ -616,18 +657,56 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 if attempt < MAX_ATTEMPTS:
                     time.sleep(1)
         
-        # If we've exhausted all attempts, use best result
-        info_placeholder.warning(
-            f"⚠️ Reached maximum attempts. Best ATS score achieved: {best_score}/100 "
-            f"(Target: {config.target_ats_score}). Proceeding with best result."
-        )
+        # If we've exhausted all attempts, use best result and validate final PDF
+        info_placeholder.info(f"🔍 Performing final validation of best result (Score: {best_score}/100)...")
+        
+        # Store best result and validate
         st.session_state.tailored_resume = best_tailored
         
+        # Final PDF validation step
+        status_placeholder.markdown(
+            '<div style="text-align: center; padding: 20px;">'
+            '<div class="spinner"></div>'
+            '<h3>🔍 Final PDF Validation</h3>'
+            '<p>Gemma is checking the generated PDF for quality...</p>'
+            '</div>',
+            unsafe_allow_html=True
+        )
+        
+        # Generate PDF for validation
+        try:
+            from renderer import generate_pdf_to_bytes
+            pdf_bytes = generate_pdf_to_bytes(best_tailored)
+            
+            # Validate the actual PDF
+            if validator and hasattr(validator, 'validate'):
+                validation_report = validator.validate(pdf_bytes)
+                
+                if validation_report.needs_regeneration:
+                    info_placeholder.warning(
+                        f"⚠️ PDF validation issues found: {', '.join(validation_report.issues[:2])}. "
+                        f"Proceeding with best available result."
+                    )
+                else:
+                    info_placeholder.success("✅ PDF Validation Passed!")
+            
+        except Exception as e:
+            info_placeholder.warning(f"⚠️ PDF validation failed: {str(e)}")
+        
+        # Final completion
         status_placeholder.markdown(
             animation_manager.get_stage_html('complete'),
             unsafe_allow_html=True
         )
         progress_bar.progress(1.0)
+        
+        # Show final summary
+        summary_col1, summary_col2 = st.columns(2)
+        with summary_col1:
+            st.success(f"🎯 Final ATS Score: {best_score}/100")
+        with summary_col2:
+            st.info(f"📊 Attempts Used: {MAX_ATTEMPTS}/{MAX_ATTEMPTS}")
+        
         time.sleep(2)
         st.session_state.step = 3
         st.rerun()
@@ -727,9 +806,18 @@ def render_step_3_download():
 
 def extract_text_from_pdf(uploaded_file) -> str:
     """Extract text from uploaded PDF file."""
+    if not uploaded_file:
+        return ""
     pdf_bytes = uploaded_file.read()
     text = ""
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+    if pdfplumber:
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n\n"
+    else:
+        return ""
         for page in pdf.pages:
             page_text = page.extract_text()
             if page_text:
@@ -742,11 +830,18 @@ def parse_resume_with_gemma(resume_text: str, api_key: str) -> ParsedResume:
     from core.models import Basics, Education, Experience, Skills, Project
     
     try:
+        from google.generativeai.generative_models import GenerativeModel
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemma-3-27b-it')
+        try:
+            genai.configure(api_key=api_key)
+        except:
+            pass  # Ignore configure errors
+        model = GenerativeModel('gemma-3-27b-it')
+    except Exception as e:
+        print(f"Gemma initialization error: {e}")
+        model = None
         
-        prompt = f"""Parse this resume text and extract structured information.
+    prompt = f"""Parse this resume text and extract structured information.
 
 Resume Text:
 {resume_text[:4000]}
@@ -794,34 +889,45 @@ Extract and return JSON with this structure:
     "achievements": ["achievement 1", "achievement 2"]
 }}
 
-Return only valid JSON, no other text."""
+ Return only valid JSON, no other text."""
         
-        response = model.generate_content(prompt)
-        
-        # Parse JSON
-        import json
-        import re
-        
-        text = response.text
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        
-        if json_match:
-            data = json.loads(json_match.group())
+        if model:
+            response = model.generate_content(prompt)
             
-            # Convert to ParsedResume
-            basics = Basics(**data.get('basics', {}))
-            education = [Education(**edu) for edu in data.get('education', [])]
-            experience = [Experience(**exp) for exp in data.get('experience', [])]
-            skills = Skills(**data.get('skills', {})) if 'skills' in data else None
-            projects = [Project(**proj) for proj in data.get('projects', [])]
+            # Parse JSON
+            import json
+            import re
             
+            text = response.text
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            
+            if json_match:
+                data = json.loads(json_match.group())
+                
+                # Convert to ParsedResume
+                basics = Basics(**data.get('basics', {}))
+                education = [Education(**edu) for edu in data.get('education', [])]
+                experience = [Experience(**exp) for exp in data.get('experience', [])]
+                skills = Skills(**data.get('skills', {})) if 'skills' in data else None
+                projects = [Project(**proj) for proj in data.get('projects', [])]
+                
+                return ParsedResume(
+                    basics=basics,
+                    education=education,
+                    experience=experience,
+                    skills=skills,
+                    projects=projects,
+                    achievements=data.get('achievements', [])
+                )
+        else:
+            # Fallback if model not available
             return ParsedResume(
-                basics=basics,
-                education=education,
-                experience=experience,
-                skills=skills,
-                projects=projects,
-                achievements=data.get('achievements', [])
+                basics=Basics(name="Unknown", email="", phone="", location=""),
+                education=[],
+                experience=[],
+                skills=Skills(languages_frameworks=[], tools=[]),
+                projects=[],
+                achievements=[]
             )
         
     except Exception as e:

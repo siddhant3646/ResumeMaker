@@ -296,8 +296,8 @@ Return a JSON array of improved bullets:
 """
         
         try:
-            # Use NVIDIA API (Kimi) for regeneration
-            improved_bullets = self._call_nvidia_for_improvement(improvement_prompt)
+            # Use AI model (KimiK2.5 primary, StepFun fallback) for regeneration
+            improved_bullets = self._call_ai_model_for_improvement(improvement_prompt)
             
             # Apply improvements to resume
             improved_resume = self._apply_improvements(
@@ -329,8 +329,20 @@ Return a JSON array of improved bullets:
                 lines.append(f"  - {bullet}")
         return "\n".join(lines)
     
-    def _call_nvidia_for_improvement(self, prompt: str) -> List[str]:
-        """Call NVIDIA API (Kimi) to get improved bullets"""
+    def _call_ai_model_for_improvement(self, prompt: str) -> List[str]:
+        """Call AI model (KimiK2.5 primary, StepFun fallback) to get improved bullets"""
+        import requests
+        import json
+        
+        # Try KimiK2.5 first
+        try:
+            return self._call_kimi_k2_5(prompt)
+        except Exception as e:
+            print(f"KimiK2.5 failed: {e}, trying StepFun fallback...")
+            return self._call_stepfun_flash(prompt)
+    
+    def _call_kimi_k2_5(self, prompt: str) -> List[str]:
+        """Call KimiK2.5 via NVIDIA API"""
         import requests
         import json
         
@@ -341,15 +353,18 @@ Return a JSON array of improved bullets:
         }
         
         payload = {
-            "model": "nvidia/llama-3.1-nemotron-70b-instruct",
+            "model": "moonshotai/kimi-k2.5",
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.7,
-            "max_tokens": 2000
+            "temperature": 1.00,
+            "top_p": 1.00,
+            "max_tokens": 32000,
+            "chat_template_kwargs": {"thinking": True},
+            "stream": False
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response = requests.post(url, headers=headers, json=payload, timeout=180)
         response.raise_for_status()
         
         result = response.json()
@@ -363,6 +378,40 @@ Return a JSON array of improved bullets:
             return data.get("improved_bullets", [])
         
         return []
+    
+    def _call_stepfun_flash(self, prompt: str) -> List[str]:
+        """Call StepFun Flash via OpenAI Client"""
+        try:
+            from openai import OpenAI
+            
+            client = OpenAI(
+                base_url="https://integrate.api.nvidia.com/v1",
+                api_key=self.nvidia_api_key
+            )
+            
+            response = client.chat.completions.create(
+                model="stepfun-ai/step-3.5-flash",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=32000,
+                temperature=0.7
+            )
+            
+            content = response.choices[0].message.content
+            
+            # Parse JSON from response
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                data = json.loads(json_match.group())
+                return data.get("improved_bullets", [])
+            
+            return []
+            
+        except ImportError:
+            # Fallback if OpenAI not available
+            raise Exception("StepFun fallback requires 'openai' library")
+        except Exception as e:
+            raise Exception(f"StepFun API call failed: {e}")
     
     def _apply_improvements(
         self,
