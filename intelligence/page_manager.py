@@ -11,9 +11,9 @@ class PageManager:
     """Manages page count and content distribution"""
     
     # Content density constants (in mm)
-    LINE_HEIGHT = 4.8  # mm per line
-    HEADER_HEIGHT = 10  # mm per section header
-    MARGINS = 15  # mm total (top + bottom)
+    LINE_HEIGHT = 4.2  # mm per line (tighter for modern look)
+    HEADER_HEIGHT = 8  # mm per section header
+    MARGINS = 12.7  # mm total (0.5 inch margins)
     PAGE_HEIGHT = 297  # A4 height in mm
     PAGE_WIDTH = 210  # A4 width in mm
     
@@ -178,13 +178,13 @@ class PageManager:
         
         total_content = bullet_height + header_height + summary_height
         
-        # Add fixed header with more padding
-        total_content += 25
+        # Add fixed header
+        total_content += 20
         
-        # Conservative page estimation with extra padding
-        pages_needed = total_content / (self.available_height - 80)  # More conservative spacing
+        # Less conservative page estimation for modern resumes
+        pages_needed = total_content / (self.available_height - 20)
         
-        return max(1, int(pages_needed) + (1 if pages_needed % 1 > 0.8 else 0))
+        return max(1, int(pages_needed) + (1 if pages_needed % 1 > 0.9 else 0))
     
     def estimate_content_density(
         self,
@@ -305,12 +305,14 @@ class PageManager:
                     
                     if fill_percentage < target_fill:
                         needed_fill = target_fill - fill_percentage
+                        # Be more aggressive with suggestions if underfilled
+                        bullet_suggestion = max(3, (needed_fill // 5))
                         
                         return PageStatus(
                             needs_content=True,
                             fill_percentage=fill_percentage,
                             current_page=i + 1,
-                            suggestion=f"Page {i+1} only {fill_percentage}% filled (need {target_fill}%). Add {max(2, needed_fill // 8)} more quantified achievement bullets with STAR format.",
+                            suggestion=f"Page {i+1} only {fill_percentage}% filled (need {target_fill}%). Please add at least {bullet_suggestion} more deep-dive achievement bullets using STAR format. Focus on integrating technical keywords and quantifiable results.",
                             issues=[f"Page {i+1}: Underfilled ({fill_percentage}% < {target_fill}% target)"]
                         )
                 

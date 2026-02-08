@@ -261,21 +261,52 @@ class ContentGenerator:
         shortcomings = "\n".join(f"- {s}" for s in ats_feedback.shortcomings[:5])
         missing_kw = ", ".join(ats_feedback.missing_keywords[:10])
         weak_bullets_text = "\n".join(f"- {b}" for b in ats_feedback.weak_bullets[:5])
+        current_resume_text = self._format_current_bullets(previous_resume)
         
-        improvement_prompt = f"""You are an expert resume writer. The previous attempt scored {ats_feedback.overall}/100.
-To pass FAANG standards, it needs >90.
+        # Determine how many bullets to ask for based on page feedback
+        bullets_needed = 5  # Default baseline
+        if page_feedback and page_feedback.needs_content:
+            # If underfilled, ask for more content based on the suggestion
+            try:
+                # Extract number from suggestion string "Please add at least X more..."
+                import re
+                match = re.search(r'at least (\d+)', page_feedback.suggestion)
+                if match:
+                    bullets_needed = int(match.group(1)) + 2 # Add a buffer
+            except:
+                bullets_needed = 8
+        
+        improvement_prompt = f"""You are an expert resume writer. The previous attempt scored {ats_feedback.overall}/100 and is {page_feedback.fill_percentage if page_feedback else 0}% filled.
+
+To pass FAANG standards, the resume needs an ATS score >90 and should be >95% filled on each page.
 
 JOB: {job_analysis.role_title}
 SENIORITY: {job_analysis.seniority_level.value}
 
+CURRENT RESUME CONTENT:
+{current_resume_text}
+
 SHORTCOMINGS:
 {shortcomings}
 
-MISSING KEYWORDS:
+REQUIRED KEYWORDS (INTEGRATE ALL OF THESE):
 {missing_kw}
 
-WEAK BULLETS:
+WEAK BULLETS TO FIX:
 {weak_bullets_text}
+
+INSTRUCTIONS:
+1. Generate exactly {bullets_needed} NEW, high-impact achievement bullets.
+2. INTEGRATE ALL REQUIRED KEYWORDS into these new bullets naturally.
+3. Use the STAR (Situation, Task, Action, Result) format with quantifiable metrics ($, %, #).
+4. Ensure the bullets match the seniority level ({job_analysis.seniority_level.value}).
+5. Look at the CURRENT RESUME CONTENT and ensure the new bullets are additive or significantly better than existing ones.
+
+Return valid JSON:
+{{
+    "improved_bullets": ["bullet 1", "bullet 2", ...],
+    "replacement_map": {{"weak bullet text": "replacement bullet text"}}
+}}
 """
         
         try:
@@ -307,7 +338,7 @@ WEAK BULLETS:
                 lines.append(f"  - {bullet}")
         return "\n".join(lines)
     
-    def _call_ai_model_for_improvement(self, prompt: str) -> List[str]:
+    def _call_ai_model_for_improvement(self, prompt: str) -> Dict:
         # Try KimiK2.5 primary
         try:
             return self._call_kimi_k2_5(prompt)
@@ -315,9 +346,9 @@ WEAK BULLETS:
             try:
                 return self._call_stepfun_flash(prompt)
             except Exception:
-                return []
+                return {"bullets": [], "replacements": {}}
     
-    def _call_kimi_k2_5(self, prompt: str) -> List[str]:
+    def _call_kimi_k2_5(self, prompt: str) -> Dict:
         import requests
         import json
         import re
@@ -335,10 +366,14 @@ WEAK BULLETS:
         content = response.json()["choices"][0]["message"]["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
-            return json.loads(json_match.group()).get("improved_bullets", [])
-        return []
+            data = json.loads(json_match.group())
+            return {
+                "bullets": data.get("improved_bullets", []),
+                "replacements": data.get("replacement_map", {})
+            }
+        return {"bullets": [], "replacements": {}}
 
-    def _call_stepfun_flash(self, prompt: str) -> List[str]:
+    def _call_stepfun_flash(self, prompt: str) -> Dict:
         import requests
         import json
         import re
@@ -356,40 +391,63 @@ WEAK BULLETS:
         content = response.json()["choices"][0]["message"]["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
-            return json.loads(json_match.group()).get("improved_bullets", [])
-        return []
+            data = json.loads(json_match.group())
+            return {
+                "bullets": data.get("improved_bullets", []),
+                "replacements": data.get("replacement_map", {})
+            }
+        return {"bullets": [], "replacements": {}}
 
     def _apply_improvements(
         self,
         resume: TailoredResume,
-        improved_bullets: List[str],
+        improvements: Dict,
         job_analysis: JobAnalysis,
         ats_feedback: 'ATSScore'
     ) -> TailoredResume:
         from copy import deepcopy
         improved = deepcopy(resume)
         
-        # Add missing keywords
+        new_bullets = improvements.get("bullets", [])
+        replacement_map = improvements.get("replacements", {})
+        
+        # Add missing keywords to skills section
         if improved.skills and ats_feedback.missing_keywords:
             existing = set([s.lower() for s in improved.skills.languages_frameworks + improved.skills.tools])
             for kw in ats_feedback.missing_keywords:
                 if kw.lower() not in existing:
-                    if any(tech in kw.lower() for tech in ['python', 'java', 'javascript', 'typescript', 'react', 'node']):
+                    if any(tech in kw.lower() for tech in ['python', 'java', 'javascript', 'typescript', 'react', 'node', 'spring', 'aws', 'cloud']):
                         improved.skills.languages_frameworks.append(kw)
                     else:
                         improved.skills.tools.append(kw)
         
-        # Replace weak bullets
-        bullet_idx = 0
-        weak_set = set(b.lower().strip() for b in ats_feedback.weak_bullets)
+        # Apply specifically mapped replacements first
         for exp in improved.experience:
-            new_bullets = []
+            updated_bullets = []
             for bullet in exp.bullets:
-                if bullet.lower().strip() in weak_set and bullet_idx < len(improved_bullets):
-                    new_bullets.append(improved_bullets[bullet_idx])
-                    bullet_idx += 1
+                # Check if this bullet should be replaced
+                replaced = False
+                for weak, better in replacement_map.items():
+                    if weak.lower().strip() in bullet.lower().strip() or bullet.lower().strip() in weak.lower().strip():
+                        updated_bullets.append(better)
+                        replaced = True
+                        break
+                if not replaced:
+                    updated_bullets.append(bullet)
+            exp.bullets = updated_bullets
+
+        # Distribute remaining NEW bullets across roles to fill page
+        if new_bullets and improved.experience:
+            # Distribute based on role priority (most recent gets more)
+            for i, bullet in enumerate(new_bullets):
+                # Simple round-robin with bias towards recent roles
+                # roles 0 (most recent) gets index 0, 1, 3, 5...
+                # roles 1 gets 2, 4, 6...
+                if i % 2 == 0 or len(improved.experience) == 1:
+                    exp_idx = 0
                 else:
-                    new_bullets.append(bullet)
-            exp.bullets = new_bullets
+                    exp_idx = 1 % len(improved.experience)
+                
+                improved.experience[exp_idx].bullets.append(bullet)
             
         return improved
