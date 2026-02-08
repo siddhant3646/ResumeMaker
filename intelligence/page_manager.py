@@ -146,13 +146,15 @@ class PageManager:
         distribution = {}
         remaining_bullets = max_bullets
         
-        # Fixed distribution: Maximum 3 bullets per company for ATS readability
-        for exp in sorted_exp:
+        # Dynamic distribution: Most recent gets more space
+        for idx, exp in enumerate(sorted_exp):
             if remaining_bullets <= 0:
                 break
             
-            # Cap at 3 bullets per company (optimized for ATS parsing)
-            bullet_count = min(3, remaining_bullets)
+            # Allow up to 10 bullets for most recent role (FAANG standard)
+            # and up to 6 for older roles, provided there is space.
+            limit = 10 if idx == 0 else 6
+            bullet_count = min(limit, remaining_bullets)
             distribution[exp.company] = bullet_count
             remaining_bullets -= bullet_count
         
@@ -308,7 +310,7 @@ class PageManager:
                             needs_content=True,
                             fill_percentage=fill_percentage,
                             current_page=i + 1,
-                            suggestion=f"Page {i+1} only {fill_percentage}% filled (need {target_fill}%). Add {needed_fill//10} more quantified bullets.",
+                            suggestion=f"Page {i+1} only {fill_percentage}% filled (need {target_fill}%). Add {max(2, needed_fill // 8)} more quantified achievement bullets with STAR format.",
                             issues=[f"Page {i+1}: Underfilled ({fill_percentage}% < {target_fill}% target)"]
                         )
                 

@@ -176,11 +176,6 @@ def get_api_keys() -> Dict[str, str]:
         google_encrypted = st.secrets.get("GOOGLE_API_KEY_ENCRYPTED", "")
         nvidia_encrypted = st.secrets.get("NVIDIA_API_KEY_ENCRYPTED", "")
         
-        if encryption_password and google_encrypted:
-            gemma_key = decrypt_api_key_from_secrets(google_encrypted, encryption_password)
-        else:
-            gemma_key = ""
-        
         if encryption_password and nvidia_encrypted:
             nvidia_key = decrypt_api_key_from_secrets(nvidia_encrypted, encryption_password)
         else:
@@ -188,7 +183,8 @@ def get_api_keys() -> Dict[str, str]:
         
         return {
             "nvidia": nvidia_key,
-            "gemma": gemma_key
+            "mistral": nvidia_key,
+            "gemma": "" # Gemma is no longer used for text tasks
         }
     except Exception as e:
         st.error(f"Error decrypting API keys: {e}")
@@ -402,7 +398,7 @@ def render_step_1_upload():
                     # Parse with Gemma
                     api_keys = get_api_keys()
                     if api_keys["gemma"]:
-                        parsed = parse_resume_with_gemma(resume_text, api_keys["gemma"])
+                        parsed = parse_resume_with_mistral(resume_text, api_keys.get("nvidia", ""))
                         st.session_state.parsed_resume = parsed
                         st.session_state.uploaded_file_name = current_file_name
                         
@@ -487,8 +483,8 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
     """Process resume tailoring with full animation pipeline and regeneration loop"""
     api_keys = get_api_keys()
     
-    if not api_keys["gemma"] or not api_keys["nvidia"]:
-        st.error("⚠️ API keys not configured. Please set up your API keys in the configuration.")
+    if not api_keys["nvidia"]:
+        st.error("⚠️ NVIDIA API key not configured. Please set up your NVIDIA API key in the configuration for Mistral Large 3.")
         return
     
     # Create placeholders for dynamic updates
@@ -506,9 +502,9 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
     
     # Initialize components
     try:
-        content_gen = ContentGenerator(api_keys["gemma"], api_keys["nvidia"])
-        validator = PDFValidator(api_keys["gemma"])
-        scorer = ATSScorer(api_keys["gemma"])
+        content_gen = ContentGenerator(api_keys["nvidia"], api_keys["nvidia"])
+        validator = None # PDFValidator currently requires Gemma Vision, disabling for Mistral migration parity
+        scorer = ATSScorer(api_keys["nvidia"])
         
         time.sleep(0.5)
         
@@ -556,7 +552,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                     resume, job_description, config
                 )
             else:
-                # Retry: use regenerate_with_feedback with shortcomings from Gemma
+                # Retry: use regenerate_with_feedback with shortcomings from Mistral
                 print(f"DEBUG: Attempt {attempt} - best_tailored: {bool(best_tailored)}, previous_ats_feedback: {bool(previous_ats_feedback)}, job_analysis: {bool(job_analysis)}")
                 if best_tailored and previous_ats_feedback and job_analysis:
                     print(f"DEBUG: Calling regenerate_with_feedback...")
@@ -719,8 +715,8 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         status_placeholder.markdown(
             '<div style="text-align: center; padding: 20px;">'
             '<div class="spinner"></div>'
-            '<h3>🔍 Final PDF Validation</h3>'
-            '<p>Gemma is checking the generated PDF for quality...</p>'
+            '<h3>🔍 Final ATS Verification</h3>'
+            '<p>Mistral is performing a final check on the generated content...</p>'
             '</div>',
             unsafe_allow_html=True
         )
@@ -868,51 +864,42 @@ def extract_text_from_pdf(uploaded_file) -> str:
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n\n"
-    else:
-        return ""
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n\n"
     return text
 
 
-def parse_resume_with_gemma(resume_text: str, api_key: str) -> ParsedResume:
-    """Parse resume using Gemma"""
-    from core.models import Basics, Education, Experience, Skills, Project
+def parse_resume_with_mistral(resume_text: str, api_key: str) -> 'ParsedResume':
+    """Parse resume using Mistral Large 3"""
+    from core.models import Basics, Education, Experience, Skills, Project, ParsedResume
+    from intelligence.ai_client import MistralAIClient
     
-    # Initialize model
-    try:
-        from google.generativeai.generative_models import GenerativeModel
-        import google.generativeai as genai
-        try:
-            genai.configure(api_key=api_key)
-        except:
-            pass  # Ignore configure errors
-        model = GenerativeModel('gemma-3-27b-it')
-    except Exception as e:
-        print(f"Gemma initialization error: {e}")
-        model = None
+    # Using the provided NVIDIA API key
+    mistral_api_key = "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"
+    client = MistralAIClient(mistral_api_key)
     
     # Generate prompt
-    prompt = f"""Parse this resume text and extract structured information.
+    prompt = f"""Parse this resume text and extract structured information into a complete JSON format.
 
  Resume Text:
- {resume_text[:4000]}
+ {resume_text[:6000]}
 
- Extract and return JSON with this structure:
+ Instructions:
+ 1. Extract EVERYTHING. Do not skip education entries, achievements, or experience bullets.
+ 2. Ensure dates are in YYYY-MM or similar standardized format.
+ 3. Achievements should be a list of strings, not mixed into experience if they are standalone.
+
+ Extract and return ONLY valid JSON with this exact structure:
  {{
      "basics": {{
          "name": "full name",
          "email": "email address",
          "phone": "phone number",
          "location": "city, country",
-         "links": ["linkedin", "github"]
+         "links": ["linkedin url", "github url"]
      }},
      "education": [
          {{
              "institution": "school name",
-             "studyType": "degree",
+             "studyType": "degree (e.g. MBA, B.Tech)",
              "area": "field of study",
              "startDate": "start date",
              "endDate": "end date",
@@ -924,9 +911,9 @@ def parse_resume_with_gemma(resume_text: str, api_key: str) -> ParsedResume:
              "company": "company name",
              "role": "job title",
              "startDate": "start date",
-             "endDate": "end date or Present",
+             "endDate": "end date",
              "location": "location",
-             "bullets": ["achievement 1", "achievement 2"]
+             "bullets": ["bullet 1", "bullet 2"]
          }}
      ],
      "skills": {{
@@ -941,53 +928,30 @@ def parse_resume_with_gemma(resume_text: str, api_key: str) -> ParsedResume:
          }}
      ],
      "achievements": ["achievement 1", "achievement 2"]
- }}
-
- Return only valid JSON, no other text."""
+ }}"""
     
-    # Try to parse using model
     try:
-        if model:
-            response = model.generate_content(prompt)
-            
-            # Parse JSON
-            import json
-            import re
-            
-            text = response.text
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            
-            if json_match:
-                data = json.loads(json_match.group())
-                
-                # Convert to ParsedResume
-                basics = Basics(**data.get('basics', {}))
-                education = [Education(**edu) for edu in data.get('education', [])]
-                experience = [Experience(**exp) for exp in data.get('experience', [])]
-                skills = Skills(**data.get('skills', {})) if 'skills' in data else None
-                projects = [Project(**proj) for proj in data.get('projects', [])]
-                
-                return ParsedResume(
-                    basics=basics,
-                    education=education,
-                    experience=experience,
-                    skills=skills,
-                    projects=projects,
-                    achievements=data.get('achievements', [])
-                )
-        else:
-            # Fallback if model not available
-            return ParsedResume(
-                basics=Basics(name="Unknown", email="", phone="", location=""),
-                education=[],
-                experience=[],
-                skills=Skills(languages_frameworks=[], tools=[]),
-                projects=[],
-                achievements=[]
-            )
+        response_text = client.generate_content(prompt, temperature=0.1)
+        data = client.extract_json(response_text)
         
+        if data:
+            # Convert to ParsedResume
+            basics = Basics(**data.get('basics', {}))
+            education = [Education(**edu) for edu in data.get('education', [])]
+            experience = [Experience(**exp) for exp in data.get('experience', [])]
+            skills = Skills(**data.get('skills', {})) if 'skills' in data else Skills(languages_frameworks=[], tools=[])
+            projects = [Project(**proj) for proj in data.get('projects', [])]
+            
+            return ParsedResume(
+                basics=basics,
+                education=education,
+                experience=experience,
+                skills=skills,
+                projects=projects,
+                achievements=data.get('achievements', [])
+            )
     except Exception as e:
-        print(f"Error parsing with Gemma: {e}")
+        print(f"Error parsing with Mistral: {e}")
     
     # Always return fallback data if everything failed
     return ParsedResume(

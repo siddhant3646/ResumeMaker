@@ -8,10 +8,11 @@ import re
 import random
 from typing import List, Dict, Optional
 from core.models import Experience, Project, SeniorityLevel, Industry, ParsedResume
+from intelligence.ai_client import MistralAIClient
 
 
 class FAANGBulletGenerator:
-    """Generate ATS-optimized bullets using FAANG/MAANG standards"""
+    """Generate ATS-optimized bullets using FAANG/MAANG standards via Mistral Large 3"""
     
     # Tier 1 Action Verbs (Leadership/Impact)
     TIER_1_VERBS = [
@@ -131,17 +132,12 @@ class FAANGBulletGenerator:
         ]
     }
     
-    def __init__(self, gemma_api_key: str):
-        """Initialize with Gemma API"""
-        self.api_key = gemma_api_key
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemma_api_key)
-            self.model = genai.GenerativeModel('gemma-3-27b-it')
-            self.available = True
-        except Exception:
-            self.available = False
-            self.model = None
+    def __init__(self, api_key: str):
+        """Initialize with Mistral AI Client"""
+        # Using the provided NVIDIA API key
+        self.api_key = "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"
+        self.client = MistralAIClient(self.api_key)
+        self.available = True
     
     def generate_optimized_bullet(
         self,
@@ -155,7 +151,7 @@ class FAANGBulletGenerator:
         Generate a STAR-formatted bullet with quantified metrics
         Uses AI for generation with structured prompting
         """
-        if self.available and self.model:
+        if self.available:
             return self._ai_generate_bullet(skill, jd_keywords, user_tech_stack, seniority_level, focus_area)
         else:
             return self._template_generate_bullet(skill, seniority_level, focus_area)
@@ -208,8 +204,8 @@ Generate ONLY the bullet point text, nothing else:
 """
         
         try:
-            response = self.model.generate_content(prompt)
-            bullet = response.text.strip()
+            response_text = self.client.generate_content(prompt)
+            bullet = response_text.strip()
             
             # Clean up the bullet
             bullet = self._clean_bullet(bullet)
@@ -353,11 +349,13 @@ Generate ONLY the bullet point text, nothing else:
 
 
 class ExperienceFabricator:
-    """Generate plausible experience to fill gaps"""
+    """Generate plausible experience to fill gaps via Mistral Large 3"""
     
-    def __init__(self, gemma_api_key: str, enabled: bool = True):
+    def __init__(self, api_key: str, enabled: bool = True):
         self.enabled = enabled
-        self.bullet_generator = FAANGBulletGenerator(gemma_api_key)
+        # Using the provided NVIDIA API key
+        self.api_key = "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"
+        self.bullet_generator = FAANGBulletGenerator(self.api_key)
     
     def fabricate_experience_entry(
         self,

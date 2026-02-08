@@ -8,41 +8,20 @@ import json
 import re
 from typing import List, Dict, Tuple
 
-try:
-    import google.generativeai as genai
-    GOOGLE_GENAI_AVAILABLE = True
-except ImportError:
-    GOOGLE_GENAI_AVAILABLE = False
-    genai = None
-
+from intelligence.ai_client import MistralAIClient
 from core.models import ATSScore, ParsedResume, JobAnalysis, SeniorityLevel
 
 
 class ATSScorer:
-    """Calculate ATS compatibility score using Gemma AI with JD-based feedback"""
+    """Calculate ATS compatibility score using Mistral Large 3 via NVIDIA API"""
     
     def __init__(self, api_key: str):
-        """Initialize scorer with Gemma API key"""
-        self.api_key = api_key
-        self.model = None
+        """Initialize scorer with Mistral AI client"""
+        # Using the provided NVIDIA API key
+        self.api_key = "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"
+        self.client = MistralAIClient(self.api_key)
         self.page_strategy = getattr(self, 'page_strategy', 'optimize')
         self.target_pages = getattr(self, 'target_pages', '1')
-        if GOOGLE_GENAI_AVAILABLE and genai is not None:
-            try:
-                if hasattr(genai, 'configure'):
-                    genai.configure(api_key=api_key)
-                # Try to get the GenerativeModel from different possible locations
-                try:
-                    self.model = genai.GenerativeModel('gemma-3-27b-it')
-                except:
-                    try:
-                        from google.generativeai import GenerativeModel
-                        self.model = GenerativeModel('gemma-3-27b-it')
-                    except:
-                        print("Warning: Could not initialize GenerativeModel")
-            except Exception as e:
-                print(f"Warning: Failed to initialize Gemma model: {e}")
-                self.model = None
     
     def calculate_score(
         self,
@@ -50,7 +29,7 @@ class ATSScorer:
         job_analysis: JobAnalysis
     ) -> ATSScore:
         """
-        Calculate comprehensive ATS score using Gemma AI
+        Calculate comprehensive ATS score using Mistral Large 3
         Accepts both ParsedResume and TailoredResume
         Returns score breakdown with detailed shortcomings for retry
         """
@@ -58,19 +37,17 @@ class ATSScorer:
         resume_text = self._extract_resume_text(resume)
         bullets = self._extract_all_bullets(resume)
         
-        # Build prompt for Gemma with full JD context
+        # Build prompt for Mistral with full JD context
         prompt = self._build_scoring_prompt(resume_text, bullets, job_analysis)
         
         try:
-            if self.model is None:
-                raise Exception("Model not initialized")
-            response = self.model.generate_content(prompt)
-            print(f"DEBUG: ATS scoring response received ({len(response.text)} chars)")
-            scores = self._parse_ats_response(response.text)
+            response_text = self.client.generate_content(prompt)
+            print(f"DEBUG: ATS scoring response received ({len(response_text)} chars)")
+            scores = self._parse_ats_response(response_text)
             print(f"DEBUG: Parsed scores: {scores}")
             
             # DEBUG: Print parsed response snippet
-            print(f"DEBUG: Response preview: {response.text[:200]}...")
+            print(f"DEBUG: Response preview: {response_text[:200]}...")
             
             return ATSScore(
                 overall=scores.get('overall', 75),
@@ -87,6 +64,7 @@ class ATSScorer:
             )
         except Exception as e:
             # Fallback to basic scores if API fails
+            print(f"ERROR in ATS scoring: {e}")
             return ATSScore(
                 overall=75,
                 keyword_match=70,
@@ -95,7 +73,7 @@ class ATSScorer:
                 action_verb_strength=70,
                 format_compliance=80,
                 section_completeness=80,
-                suggestions=[f"Error during AI scoring: {str(e)}"],
+                suggestions=[f"Error during Mistral scoring: {str(e)}"],
                 shortcomings=[],
                 missing_keywords=[],
                 weak_bullets=[]

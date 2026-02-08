@@ -17,8 +17,8 @@ class HybridATSScorer:
     between the two scoring methods
     """
     
-    def __init__(self, gemma_api_key: str):
-        self.ai_scorer = ATSScorer(gemma_api_key)
+    def __init__(self, api_key: str):
+        self.ai_scorer = ATSScorer(api_key)
         self.rule_scorer = AlternativeATSScorer()
         self.debug_mode = True
         self.score_history = []  # Track score progression
@@ -116,7 +116,7 @@ class HybridATSScorer:
         resume: ParsedResume, 
         job_analysis: JobAnalysis
     ) -> Tuple[ATSScore, float]:
-        """Get AI-based score from Gemma"""
+        """Get AI-based score from Mistral"""
         start = time.time()
         try:
             score = self.ai_scorer.calculate_score(resume, job_analysis)
@@ -285,9 +285,9 @@ class HybridATSScorer:
 # Export the scorer
 hybrid_ats_scorer = None
 
-def get_hybrid_scorer(gemma_api_key: str) -> HybridATSScorer:
+def get_hybrid_scorer(api_key: str) -> HybridATSScorer:
     """Get or create the hybrid scorer instance"""
     global hybrid_ats_scorer
     if hybrid_ats_scorer is None:
-        hybrid_ats_scorer = HybridATSScorer(gemma_api_key)
+        hybrid_ats_scorer = HybridATSScorer(api_key)
     return hybrid_ats_scorer

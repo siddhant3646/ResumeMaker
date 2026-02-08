@@ -7,6 +7,7 @@ import json
 import re
 from typing import List, Dict, Optional
 from core.models import JobAnalysis, SeniorityLevel, CompanyType, Industry, ParsedResume
+from intelligence.ai_client import MistralAIClient
 
 
 class RoleDetector:
@@ -42,17 +43,12 @@ class RoleDetector:
         Industry.GAMING: ['game', 'gaming', 'esports', 'unity', 'unreal', 'mobile game']
     }
     
-    def __init__(self, gemma_api_key: str):
-        """Initialize with Gemma API key"""
-        self.api_key = gemma_api_key
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemma_api_key)
-            self.model = genai.GenerativeModel('gemma-3-27b-it')
-            self.available = True
-        except Exception:
-            self.available = False
-            self.model = None
+    def __init__(self, api_key: str):
+        """Initialize with Mistral AI client"""
+        # Using the provided NVIDIA API key
+        self.api_key = "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"
+        self.client = MistralAIClient(self.api_key)
+        self.available = True
     
     def analyze_job_description(self, jd_text: str) -> JobAnalysis:
         """
@@ -168,15 +164,10 @@ Important:
 """
         
         try:
-            response = self.model.generate_content(prompt)
-            # Extract JSON from response
-            text = response.text
-            # Find JSON block
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
+            response_text = self.client.generate_content(prompt, temperature=0.1)
+            return self.client.extract_json(response_text)
         except Exception as e:
-            print(f"AI analysis error: {e}")
+            print(f"Mistral analysis error: {e}")
         
         return {}
     
