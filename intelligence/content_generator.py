@@ -3,7 +3,7 @@ Main Content Generator
 Coordinates all intelligence modules to generate optimized resume
 """
 
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Optional
 from core.models import (
     ParsedResume, TailoredResume, JobAnalysis, GenerationConfig,
     Experience, Project, ATSScore, Skills, SkillsGapReport, ContentPlan
