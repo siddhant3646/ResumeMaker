@@ -100,7 +100,8 @@ class ContentGenerator:
         # Process each experience entry
         for idx, exp in enumerate(resume.experience):
             is_most_recent = (idx == 0)
-            target_bullets = page_plan.bullets_per_experience.get(exp.company, 8 if is_most_recent else 4)
+            # STRICT LIMITS: max 8 bullets for most recent, max 5 for others
+            target_bullets = min(8 if is_most_recent else 5, page_plan.bullets_per_experience.get(exp.company, 8 if is_most_recent else 4))
             
             # Enhance existing bullets
             enhanced_bullets = self._enhance_bullets(
@@ -120,6 +121,18 @@ class ContentGenerator:
                     f"Added {len(fabricated)} bullets to {exp.company} experience"
                 )
             
+            # SANITIZE all bullets (remove markdown, brackets, etc.)
+            sanitized_bullets = [self._sanitize_bullet(b) for b in enhanced_bullets]
+            
+            # DEDUPLICATE bullets (keep first occurrence)
+            seen_bullets = set()
+            unique_bullets = []
+            for bullet in sanitized_bullets:
+                normalized = bullet.lower().strip()[:50]  # Compare first 50 chars
+                if normalized not in seen_bullets:
+                    seen_bullets.add(normalized)
+                    unique_bullets.append(bullet)
+            
             # Create enhanced experience entry
             enhanced_exp = Experience(
                 company=exp.company,
@@ -127,7 +140,7 @@ class ContentGenerator:
                 startDate=exp.startDate,
                 endDate=exp.endDate,
                 location=exp.location,
-                bullets=enhanced_bullets[:target_bullets],  # Limit to target
+                bullets=unique_bullets[:target_bullets],  # Limit to target
                 is_fabricated=exp.is_fabricated
             )
             
@@ -170,6 +183,31 @@ class ContentGenerator:
             enhanced.append(enhanced_bullet)
         return enhanced
     
+    def _sanitize_bullet(self, bullet: str) -> str:
+        """
+        Sanitize a bullet point:
+        1. Remove markdown formatting (**bold**, *italic*)
+        2. Remove parenthetical text like (Singleton and Factory patterns)
+        3. Clean up extra whitespace
+        """
+        import re
+        
+        # Remove markdown bold: **text** -> text
+        sanitized = re.sub(r'\*\*([^*]+)\*\*', r'\1', bullet)
+        
+        # Remove markdown italic: *text* -> text
+        sanitized = re.sub(r'\*([^*]+)\*', r'\1', sanitized)
+        
+        # Remove parenthetical content that looks like elaboration
+        # e.g., "(Singleton and Factory patterns)" but keep "(10M+ users)"
+        # Only remove if > 20 chars inside parens (likely elaboration, not metrics)
+        sanitized = re.sub(r'\s*\([^)]{20,}\)', '', sanitized)
+        
+        # Clean up double spaces
+        sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+        
+        return sanitized
+    
     def _add_fabricated_bullets(
         self,
         exp: Experience,
@@ -211,21 +249,40 @@ class ContentGenerator:
         
         # FILLER SKILLS BLOCKLIST - remove these for SDE-2+ roles
         filler_skills = {
-            'agile methodologies', 'agile', 'scrum',
+            # Agile/Process terms
+            'agile methodologies', 'agile', 'scrum', 'kanban',
+            # Vague principles
             'maintainability principles', 'maintainability',
-            'modular and loosely coupled code', 'loosely coupled',
+            'modular and loosely coupled code', 'loosely coupled', 'loosely coupled systems',
             'code quality practices', 'code quality',
+            'maintainability best practices', 'best practices',
+            'security fundamentals', 'security best practices',
+            'performance optimization', 'optimization',
+            # Basic web (assumed for any dev)
             'html', 'css', 'html5', 'css3',
-            'time/space complexity analysis', 'complexity analysis',
+            # DSA/Fundamentals (assumed at SDE-2 level)
+            'time/space complexity analysis', 'complexity analysis', 'time/space complexity',
             'data structures', 'algorithms', 'dsa',
-            'oop concepts', 'object-oriented', 'oops',
+            'oop concepts', 'object-oriented', 'oops', 'oop',
+            # Tools category terms (too vague)
             'static analysis tools',
+            'profiling tools', 'instrumentation',
             'cloud',  # Too vague when specific providers listed
             'database',  # Too vague
-            'programming',
-            'software development',
-            'problem solving',
-            'team player',
+            # Generic filler
+            'programming', 'coding',
+            'software development', 'software engineering',
+            'problem solving', 'analytical skills',
+            'team player', 'communication',
+            # Architecture buzzwords without specifics
+            'design patterns',  # Better shown in context
+            'modular coding',
+            'distributed systems',  # Too vague
+            'scalable systems',  # Too vague
+            'messaging', 'messaging systems',
+            'reliability engineering',
+            # Version control (assumed)
+            'git', 'github', 'gitlab', 'version control',
         }
         
         # REDUNDANCY MAP - if key exists, remove values
