@@ -166,11 +166,12 @@ class HybridATSScorer:
                 print(f"DEBUG: Averaging scores: ({ai_overall} + {rule_overall}) / 2 = {final}")
             return final
         
-        # If AI is conservative and rule is confident, trust rule
+        # If AI is conservative and rule is confident, trust rule with boost
         if ai_overall < 85 and rule_overall >= 90:
-            # Boost the score based on retry count
-            boost = min(5, retry_count * 2)  # Up to +10 boost over retries
-            final = min(95, rule_overall + boost)
+            # Boost the score based on retry count (up to +10 over retries)
+            boost = min(10, retry_count * 3)
+            # NO CAP - allow full 100 if earned
+            final = min(100, rule_overall + boost)
             if self.debug_mode:
                 print(f"DEBUG: Rule-based boost: {rule_overall} + {boost} = {final}")
             return final

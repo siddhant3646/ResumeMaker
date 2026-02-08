@@ -179,28 +179,35 @@ class FAANGBulletGenerator:
         # Get realistic metrics
         metrics = self._generate_realistic_metrics(seniority_level)
         
-        prompt = f"""Generate a resume bullet point using STAR method.
+        prompt = f"""Generate a FAANG-quality resume bullet point following STRICT STAR format.
+
+MANDATORY STAR FORMAT:
+- S/T (Situation/Task): Implicit context (max 5 words at start)
+- A (Action): Specific technical action YOU took (verb + tech details)
+- R (Result): Quantified business impact with SPECIFIC numbers
 
 Context:
-- Skill: {skill}
+- Primary Skill: {skill}
 - Seniority: {seniority_level.value}
 - Focus Area: {focus_area}
-- Action Verb: {verb}
-- User's Tech Stack: {', '.join(user_tech_stack[:5])}
-- JD Keywords to Include: {', '.join(jd_keywords[:3])}
-- Metrics: {metrics}
+- Start With Action Verb: {verb}
+- JD Keywords (MUST include 2-3 of these): {', '.join(jd_keywords[:5])}
+- User's Tech Stack: {', '.join(user_tech_stack[:5]) if user_tech_stack else 'N/A'}
+- Metrics to embed: {metrics}
 
-Requirements:
-1. Use the action verb: {verb}
-2. Follow STAR format (implied Situation/Task, explicit Action, quantified Result)
-3. Include at least ONE specific metric (percentage, scale, time, cost)
-4. Mention 1-2 technologies from the user's tech stack
-5. Include 1-2 keywords from the job description
-6. Keep under 30 words, maximum 2 lines
-7. Be specific and technical
-8. Use realistic FAANG-scale metrics
+STRICT REQUIREMENTS:
+1. START with action verb: {verb}
+2. MUST include 2-3 keywords from JD: {', '.join(jd_keywords[:3])}
+3. MUST have quantified result with SPECIFIC metric (e.g., "reducing latency by 40%", "saving $500K annually", "processing 10M+ requests daily")
+4. Structure: [Action Verb] + [Technical What] + [Result with Number]
+5. Keep between 20-30 words (one sentence)
+6. NO markdown formatting, NO asterisks, NO brackets
+7. Be specific about scale (mention team size, user count, or data volume)
 
-Generate ONLY the bullet point text, nothing else:
+EXAMPLE FORMAT:
+"{verb} [technical achievement] using [1-2 JD keywords], resulting in [specific numeric improvement]."
+
+Generate ONLY the bullet text:
 """
         
         try:
@@ -327,25 +334,65 @@ Generate ONLY the bullet point text, nothing else:
         jd_keywords: List[str]
     ) -> str:
         """
-        Enhance an existing bullet with better metrics and keywords
+        Enhance an existing bullet with STAR format and JD keywords using AI
         """
-        if self._has_metrics(bullet) and any(kw in bullet.lower() for kw in jd_keywords):
-            return bullet  # Already good
+        # Check if bullet already has good STAR format with metrics and keywords
+        has_metrics = self._has_metrics(bullet)
+        keyword_count = sum(1 for kw in jd_keywords if kw.lower() in bullet.lower())
         
-        # Add metrics if missing
-        if not self._has_metrics(bullet):
-            metrics = self._generate_realistic_metrics(seniority_level)
-            bullet = self._add_metrics_to_bullet(bullet, metrics)
+        if has_metrics and keyword_count >= 2:
+            return bullet  # Already optimized
         
-        # Strengthen action verb
-        for tier_3 in self.TIER_3_VERBS:
-            if bullet.lower().startswith(tier_3.lower()):
-                # Upgrade to tier 2
-                new_verb = random.choice(self.TIER_2_VERBS)
-                bullet = new_verb + bullet[len(tier_3):]
-                break
-        
-        return self._clean_bullet(bullet)
+        # Use AI to transform bullet to STAR format with JD keywords
+        try:
+            prompt = f"""Transform this resume bullet into STRICT STAR format with JD keywords.
+
+ORIGINAL BULLET: {bullet}
+
+MANDATORY REQUIREMENTS:
+1. Keep the core achievement/action from the original
+2. MUST follow STAR: Action Verb + Technical Achievement + Quantified Result
+3. MUST include 2-3 of these JD keywords naturally: {', '.join(jd_keywords[:5])}
+4. MUST have specific quantified result (percentage, time, money, scale, users)
+5. Start with strong action verb from this list: Architected, Engineered, Spearheaded, Optimized, Implemented, Developed, Designed
+6. Keep between 20-30 words (one sentence)
+7. NO markdown, NO asterisks, NO brackets
+8. Be specific and technical
+
+EXAMPLE TRANSFORMATION:
+Before: "Worked on improving the database"
+After: "Optimized PostgreSQL database queries using indexing and caching strategies, reducing API latency by 65% for 2M+ daily active users."
+
+Output ONLY the improved bullet, nothing else:
+"""
+            response = self.client.generate_content(prompt)
+            enhanced = response.strip()
+            
+            # Clean the bullet
+            enhanced = self._clean_bullet(enhanced)
+            
+            # Ensure it has metrics (fallback)
+            if not self._has_metrics(enhanced):
+                metrics = self._generate_realistic_metrics(seniority_level)
+                enhanced = self._add_metrics_to_bullet(enhanced, metrics)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"DEBUG: Bullet enhancement error: {e}")
+            # Fallback: Add metrics if missing and strengthen verb
+            if not has_metrics:
+                metrics = self._generate_realistic_metrics(seniority_level)
+                bullet = self._add_metrics_to_bullet(bullet, metrics)
+            
+            # Strengthen action verb
+            for tier_3 in self.TIER_3_VERBS:
+                if bullet.lower().startswith(tier_3.lower()):
+                    new_verb = random.choice(self.TIER_2_VERBS)
+                    bullet = new_verb + bullet[len(tier_3):]
+                    break
+            
+            return self._clean_bullet(bullet)
 
 
 class ExperienceFabricator:
