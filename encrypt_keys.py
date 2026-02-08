@@ -113,14 +113,26 @@ def main():
         print("\n❌ Error: Password must be at least 8 characters long!")
         return
     
-    print("\n" + "=" * 60)
-    print("Now let's encrypt your API keys:")
-    print("=" * 60)
+    # Try to load keys from .env
+    env_keys = {}
+    if os.path.exists(".env"):
+        with open(".env", "r") as f:
+            for line in f:
+                if "=" in line and not line.strip().startswith("#"):
+                    k, v = line.strip().split("=", 1)
+                    env_keys[k.strip()] = v.strip()
     
     # Google AI Studio API Key
     print("\n🔑 Google AI Studio API Key (for gemma-3-27b-it parsing)")
     print("   Get it from: https://makersuite.google.com/app/apikey")
-    google_key = getpass.getpass("   Enter Google AI Studio API Key: ").strip()
+    env_google = env_keys.get("GOOGLE_API_KEY", "")
+    if env_google:
+        print(f"   (Detected in .env: {env_google[:4]}...{env_google[-4:]})")
+        google_key = getpass.getpass("   Enter Google AI Key [Leave blank to use .env]: ").strip()
+        if not google_key:
+            google_key = env_google
+    else:
+        google_key = getpass.getpass("   Enter Google AI Studio API Key: ").strip()
     
     if google_key:
         encrypted_google = encrypt_api_key(google_key, password)
@@ -133,7 +145,14 @@ def main():
     # NVIDIA API Key
     print("\n🔑 NVIDIA API Key (for Mistral Large 3 scoring & generation)")
     print("   Get it from: https://build.nvidia.com/mistralai/mistral-large-2411")
-    nvidia_key = getpass.getpass("   Enter NVIDIA API Key: ").strip()
+    env_nvidia = env_keys.get("NVIDIA_API_KEY", "")
+    if env_nvidia:
+        print(f"   (Detected in .env: {env_nvidia[:4]}...{env_nvidia[-4:]})")
+        nvidia_key = getpass.getpass("   Enter NVIDIA API Key [Leave blank to use .env]: ").strip()
+        if not nvidia_key:
+            nvidia_key = env_nvidia
+    else:
+        nvidia_key = getpass.getpass("   Enter NVIDIA API Key: ").strip()
     
     if nvidia_key:
         encrypted_nvidia = encrypt_api_key(nvidia_key, password)
