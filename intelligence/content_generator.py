@@ -436,18 +436,31 @@ Return valid JSON:
                     updated_bullets.append(bullet)
             exp.bullets = updated_bullets
 
+        # Define sorted list of experiences
+        sorted_exp = sorted(improved.experience, key=lambda x: x.startDate if hasattr(x, 'startDate') else "", reverse=True)
+
         # Distribute remaining NEW bullets across roles to fill page
-        if new_bullets and improved.experience:
-            # Distribute based on role priority (most recent gets more)
+        if new_bullets and sorted_exp:
             for i, bullet in enumerate(new_bullets):
-                # Simple round-robin with bias towards recent roles
-                # roles 0 (most recent) gets index 0, 1, 3, 5...
-                # roles 1 gets 2, 4, 6...
-                if i % 2 == 0 or len(improved.experience) == 1:
-                    exp_idx = 0
-                else:
-                    exp_idx = 1 % len(improved.experience)
+                # Hard caps to prevent 3-page spillover:
+                # Role 0 (most recent): max 10 bullets
+                # Others: max 6 bullets
                 
-                improved.experience[exp_idx].bullets.append(bullet)
+                # Try to add to role 0 first if it has space
+                if len(sorted_exp[0].bullets) < 10:
+                    sorted_exp[0].bullets.append(bullet)
+                    continue
+                
+                # Otherwise, try to find another role with space (< 6 bullets)
+                added = False
+                for exp in sorted_exp[1:]:
+                    if len(exp.bullets) < 6:
+                        exp.bullets.append(bullet)
+                        added = True
+                        break
+                
+                # If all roles are capped, stop adding to prevent 3-page spillover
+                if not added:
+                    break
             
         return improved

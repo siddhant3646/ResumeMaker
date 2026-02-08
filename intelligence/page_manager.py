@@ -96,10 +96,10 @@ class PageManager:
         total_experiences = len(resume.experience)
         total_bullets = sum(len(exp.bullets) for exp in resume.experience)
         
-        # Simple heuristic
-        if total_experiences >= 3 or total_bullets >= 12:
+        # More modern heuristic: 1 page is usually enough for up to 3 roles or 15-18 bullets
+        if total_experiences >= 4 or total_bullets >= 18:
             return 2
-        elif total_experiences >= 2 and len(resume.projects) >= 2:
+        elif total_experiences >= 3 and len(resume.projects) >= 3:
             return 2
         else:
             return 1
@@ -304,17 +304,25 @@ class PageManager:
                     fill_percentage = int(fill_ratio * 100)
                     
                     if fill_percentage < target_fill:
-                        needed_fill = target_fill - fill_percentage
-                        # Be more aggressive with suggestions if underfilled
-                        bullet_suggestion = max(3, (needed_fill // 5))
+                        # Only flag underfill if it's the target page or if we are well below target
+                        # For page 1 of a multi-page resume, 90% is excellent.
+                        current_page_num = i + 1
+                        is_last_page = (current_page_num == len(pdf.pages))
                         
-                        return PageStatus(
-                            needs_content=True,
-                            fill_percentage=fill_percentage,
-                            current_page=i + 1,
-                            suggestion=f"Page {i+1} only {fill_percentage}% filled (need {target_fill}%). Please add at least {bullet_suggestion} more deep-dive achievement bullets using STAR format. Focus on integrating technical keywords and quantifiable results.",
-                            issues=[f"Page {i+1}: Underfilled ({fill_percentage}% < {target_fill}% target)"]
-                        )
+                        # Relax threshold for intermediate pages
+                        effective_target = target_fill if is_last_page else 85
+                        
+                        if fill_percentage < effective_target:
+                            needed_fill = effective_target - fill_percentage
+                            bullet_suggestion = max(2, (needed_fill // 10))
+                            
+                            return PageStatus(
+                                needs_content=True,
+                                fill_percentage=fill_percentage,
+                                current_page=current_page_num,
+                                suggestion=f"Page {current_page_num} is {fill_percentage}% filled. Add ~{bullet_suggestion} more high-impact bullets to reach target density.",
+                                issues=[f"Page {current_page_num}: Underfilled ({fill_percentage}% < {effective_target}% target)"]
+                            )
                 
                 # All pages pass
                 return PageStatus(
