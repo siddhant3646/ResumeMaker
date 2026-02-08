@@ -130,17 +130,17 @@ def main():
         encrypted_google = None
         print("   ⚠️ Skipped (no key provided)")
     
-    # Groq API Key
-    print("\n🔑 Groq API Key (for resume generation)")
-    print("   Get it from: https://console.groq.com/keys")
-    groq_key = getpass.getpass("   Enter Groq API Key: ").strip()
+    # NVIDIA API Key
+    print("\n🔑 NVIDIA API Key (for Mistral Large 3 scoring & generation)")
+    print("   Get it from: https://build.nvidia.com/mistralai/mistral-large-2411")
+    nvidia_key = getpass.getpass("   Enter NVIDIA API Key: ").strip()
     
-    if groq_key:
-        encrypted_groq = encrypt_api_key(groq_key, password)
-        print(f"\n   ✅ Encrypted Groq API Key:")
-        print(f"   {encrypted_groq}")
+    if nvidia_key:
+        encrypted_nvidia = encrypt_api_key(nvidia_key, password)
+        print(f"\n   ✅ Encrypted NVIDIA API Key:")
+        print(f"   {encrypted_nvidia}")
     else:
-        encrypted_groq = None
+        encrypted_nvidia = None
         print("   ⚠️ Skipped (no key provided)")
     
     # Save to file
@@ -155,8 +155,8 @@ def main():
         f.write(f"ENCRYPTION_PASSWORD = \"{password}\"\n\n")
         if encrypted_google:
             f.write(f"GOOGLE_API_KEY_ENCRYPTED = \"{encrypted_google}\"\n")
-        if encrypted_groq:
-            f.write(f"GROQ_API_KEY_ENCRYPTED = \"{encrypted_groq}\"\n")
+        if encrypted_nvidia:
+            f.write(f"NVIDIA_API_KEY_ENCRYPTED = \"{encrypted_nvidia}\"\n")
     
     print("\n✅ Encrypted keys saved to '.encrypted_keys'")
     print("\n" + "=" * 60)
@@ -192,10 +192,10 @@ def main():
             masked = decrypted[:4] + "*" * (len(decrypted) - 8) + decrypted[-4:]
             print(f"\n✅ Google API Key decryption successful: {masked}")
         
-        if encrypted_groq:
-            decrypted = decrypt_api_key(encrypted_groq, password)
+        if encrypted_nvidia:
+            decrypted = decrypt_api_key(encrypted_nvidia, password)
             masked = decrypted[:4] + "*" * (len(decrypted) - 8) + decrypted[-4:]
-            print(f"✅ Groq API Key decryption successful: {masked}")
+            print(f"✅ NVIDIA API Key decryption successful: {masked}")
         
         print("\n🎉 All tests passed! Your encryption setup is ready.")
         
