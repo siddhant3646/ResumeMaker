@@ -257,6 +257,12 @@ class ContentGenerator:
                 f"Add {3 if page_feedback.fill_percentage < 80 else 2} fabricated quantified achievements to fill page properly."
             )
         
+        # NEW: Handle sparse trailing page consolidation
+        # If page 2+ is <20% filled, we should REMOVE weak content, not add more.
+        if page_feedback and "CONSOLIDATE" in (page_feedback.suggestion or ""):
+            print(f"DEBUG: CONSOLIDATION MODE - Page {page_feedback.current_page} is sparse ({page_feedback.fill_percentage}%)")
+            return self._consolidate_resume(previous_resume, ats_feedback)
+        
         # Build improvement prompt
         shortcomings = "\n".join(f"- {s}" for s in ats_feedback.shortcomings[:5])
         missing_kw = ", ".join(ats_feedback.missing_keywords[:10])
@@ -491,3 +497,64 @@ Return valid JSON:
                     break
             
         return improved
+
+    def _consolidate_resume(
+        self,
+        resume: TailoredResume,
+        ats_feedback: 'ATSScore'
+    ) -> TailoredResume:
+        """
+        Consolidate content by removing weak bullets to fit on fewer pages.
+        Called when a trailing page (page 2+) has <20% content.
+        """
+        from copy import deepcopy
+        consolidated = deepcopy(resume)
+        
+        # Get list of weak bullets from ATS feedback
+        weak_bullets = set(b.lower().strip() for b in ats_feedback.weak_bullets)
+        
+        # Calculate how many bullets to remove
+        # Each bullet is ~2.5 lines. To reduce a page, we need to remove ~10-15 bullets.
+        bullets_to_remove = 10
+        removed_count = 0
+        
+        print(f"DEBUG: Consolidation - targeting {bullets_to_remove} weak bullets for removal")
+        print(f"DEBUG: Weak bullets identified: {weak_bullets}")
+        
+        # Sort experiences oldest-first (we want to trim older roles more aggressively)
+        sorted_exp = sorted(consolidated.experience, key=lambda x: x.startDate if hasattr(x, 'startDate') else "", reverse=False)
+        
+        for exp in sorted_exp:
+            if removed_count >= bullets_to_remove:
+                break
+            
+            # Filter out weak bullets from this experience
+            original_count = len(exp.bullets)
+            strong_bullets = []
+            
+            for bullet in exp.bullets:
+                is_weak = False
+                normalized = bullet.lower().strip()
+                
+                # Check if this bullet matches any weak bullet signature
+                for weak in weak_bullets:
+                    if weak in normalized or normalized in weak:
+                        is_weak = True
+                        break
+                
+                # Also check for generic/short bullets as weak
+                if len(bullet) < 50 or not any(char.isdigit() for char in bullet):
+                    # Short bullets without numbers are likely weak
+                    is_weak = True
+                
+                if is_weak and removed_count < bullets_to_remove:
+                    removed_count += 1
+                    print(f"DEBUG: Removed weak bullet: {bullet[:50]}...")
+                else:
+                    strong_bullets.append(bullet)
+            
+            exp.bullets = strong_bullets
+            print(f"DEBUG: {exp.company}: {original_count} -> {len(exp.bullets)} bullets")
+        
+        print(f"DEBUG: Consolidation complete - removed {removed_count} bullets")
+        return consolidated

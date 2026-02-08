@@ -308,6 +308,18 @@ class PageManager:
                         # For page 1 of a multi-page resume, 90% is excellent.
                         current_page_num = i + 1
                         is_last_page = (current_page_num == len(pdf.pages))
+                        total_pages = len(pdf.pages)
+                        
+                        # NEW: Detect sparse trailing page (<20%)
+                        # If this is page 2+ and very sparse, signal consolidation
+                        if current_page_num > 1 and fill_percentage < 20:
+                            return PageStatus(
+                                needs_content=False,  # Don't add more content
+                                fill_percentage=fill_percentage,
+                                current_page=current_page_num,
+                                suggestion=f"CONSOLIDATE: Page {current_page_num} has only {fill_percentage}% content. Remove weak bullets from previous pages to eliminate this sparse page.",
+                                issues=[f"Page {current_page_num}: Sparse trailing page ({fill_percentage}% < 20%)"]
+                            )
                         
                         # Relax threshold for intermediate pages
                         effective_target = target_fill if is_last_page else 85
