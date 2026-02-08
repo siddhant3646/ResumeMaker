@@ -200,15 +200,110 @@ class ContentGenerator:
         return fabricated
     
     def _enhance_skills(self, skills: 'Skills', job_analysis: JobAnalysis) -> 'Skills':
-        """Enhance skills section with JD keywords"""
+        """
+        Enhance and CLEAN UP skills section:
+        1. Add missing JD keywords
+        2. Remove duplicates (case-insensitive)
+        3. Remove redundant skills (Spring when Spring Boot exists)
+        4. Remove filler/basic skills for SDE-2+ level
+        """
         from core.models import Skills
-        existing = set([s.lower() for s in skills.languages_frameworks + skills.tools])
+        
+        # FILLER SKILLS BLOCKLIST - remove these for SDE-2+ roles
+        filler_skills = {
+            'agile methodologies', 'agile', 'scrum',
+            'maintainability principles', 'maintainability',
+            'modular and loosely coupled code', 'loosely coupled',
+            'code quality practices', 'code quality',
+            'html', 'css', 'html5', 'css3',
+            'time/space complexity analysis', 'complexity analysis',
+            'data structures', 'algorithms', 'dsa',
+            'oop concepts', 'object-oriented', 'oops',
+            'static analysis tools',
+            'cloud',  # Too vague when specific providers listed
+            'database',  # Too vague
+            'programming',
+            'software development',
+            'problem solving',
+            'team player',
+        }
+        
+        # REDUNDANCY MAP - if key exists, remove values
+        redundancy_map = {
+            'spring boot': ['spring', 'spring framework', 'spring mvc'],
+            'react': ['reactjs', 'react.js'],
+            'node.js': ['nodejs', 'node'],
+            'typescript': ['ts'],
+            'javascript': ['js'],
+            'kubernetes': ['k8s'],
+            'postgresql': ['postgres'],
+            'mongodb': ['mongo'],
+            'aws': ['amazon web services'],
+            'gcp': ['google cloud platform', 'google cloud'],
+            'azure': ['microsoft azure'],
+        }
+        
+        def normalize(s: str) -> str:
+            return s.lower().strip()
+        
+        def should_remove(skill: str, all_skills_normalized: set) -> bool:
+            norm = normalize(skill)
+            
+            # Check filler blocklist
+            if norm in filler_skills:
+                return True
+            
+            # Check redundancy - if a "parent" skill exists, remove this variant
+            for parent, variants in redundancy_map.items():
+                if norm in [normalize(v) for v in variants]:
+                    if parent in all_skills_normalized:
+                        return True
+            
+            # Check for "(one of these)" type patterns
+            if 'one of' in norm or '/' in norm:
+                return True
+                
+            return False
+        
+        # Combine all skills for analysis
+        all_skills = skills.languages_frameworks + skills.tools
+        all_normalized = set(normalize(s) for s in all_skills)
+        
+        # Step 1: Deduplicate (case-insensitive, keep first occurrence)
+        seen = set()
+        deduped_langs = []
+        for s in skills.languages_frameworks:
+            norm = normalize(s)
+            if norm not in seen:
+                seen.add(norm)
+                deduped_langs.append(s)
+        
+        deduped_tools = []
+        for s in skills.tools:
+            norm = normalize(s)
+            if norm not in seen:
+                seen.add(norm)
+                deduped_tools.append(s)
+        
+        # Step 2: Remove filler and redundant skills
+        cleaned_langs = [s for s in deduped_langs if not should_remove(s, all_normalized)]
+        cleaned_tools = [s for s in deduped_tools if not should_remove(s, all_normalized)]
+        
+        # Step 3: Add missing JD keywords (only non-filler ones)
+        existing = set(normalize(s) for s in cleaned_langs + cleaned_tools)
         for skill in job_analysis.key_skills:
-            if skill.lower() not in existing:
-                if skill.lower() in ['python', 'java', 'javascript', 'typescript', 'go', 'rust', 'c++', 'c#']:
-                    skills.languages_frameworks.append(skill)
+            norm = normalize(skill)
+            if norm not in existing and norm not in filler_skills:
+                if norm in ['python', 'java', 'javascript', 'typescript', 'go', 'rust', 'c++', 'c#', 'kotlin', 'scala']:
+                    cleaned_langs.append(skill)
                 else:
-                    skills.tools.append(skill)
+                    cleaned_tools.append(skill)
+                existing.add(norm)
+        
+        print(f"DEBUG: Skills cleanup - Langs: {len(skills.languages_frameworks)} -> {len(cleaned_langs)}, Tools: {len(skills.tools)} -> {len(cleaned_tools)}")
+        
+        skills.languages_frameworks = cleaned_langs
+        skills.tools = cleaned_tools
         return skills
     
     def _generate_summary(self, resume: TailoredResume, job_analysis: JobAnalysis) -> str:
