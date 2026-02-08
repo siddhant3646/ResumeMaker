@@ -190,14 +190,20 @@ class ATSScorer:
         
         scores['missing_keywords'] = missing_keywords
         
-        # Extract weak bullets
+        # Extract weak bullets - improved regex for robustness
         weak_bullets = []
-        weak_bullets_match = re.search(r'Weak/Passive Bullets:\s*(.*?)\n###', response_text, re.DOTALL)
+        weak_bullets_match = re.search(r'Weak/Passive Bullets:\s*(.*?)(?:\n###|$)', response_text, re.DOTALL)
         if weak_bullets_match:
             weak_text = weak_bullets_match.group(1)
-            # Extract bullet text before "->" correction
-            bullet_matches = re.findall(r'-\s*\*?\*?\s*["\']?([^"\']+)["\']?\s*->', weak_text)
-            weak_bullets = [bullet.strip() for bullet in bullet_matches if bullet.strip()]
+            # Try to extract bullet text before various arrow types
+            # Support: ->, =>, :, or just linear listing
+            bullet_matches = re.findall(r'-\s*["\']?([^"\']+)["\']?\s*(?:->|=>|:|–)\s*', weak_text)
+            
+            if not bullet_matches:
+                 # Fallback: just separate lines if no arrows found
+                 bullet_matches = re.findall(r'-\s*([^\n]+)', weak_text)
+                 
+            weak_bullets = [b.strip().split('->')[0].strip() for b in bullet_matches if b.strip()]
         
         scores['weak_bullets'] = weak_bullets
         

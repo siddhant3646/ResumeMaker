@@ -264,7 +264,7 @@ class ContentGenerator:
         current_resume_text = self._format_current_bullets(previous_resume)
         
         # Determine how many bullets to ask for based on page feedback
-        bullets_needed = 5  # Default baseline
+        bullets_needed = 7  # Default baseline (increased from 5)
         if page_feedback and page_feedback.needs_content:
             # If underfilled, ask for more content based on the suggestion
             try:
@@ -272,9 +272,20 @@ class ContentGenerator:
                 import re
                 match = re.search(r'at least (\d+)', page_feedback.suggestion)
                 if match:
-                    bullets_needed = int(match.group(1)) + 2 # Add a buffer
+                    suggested = int(match.group(1))
+                    # Add buffer based on how underfilled we are
+                    if page_feedback.fill_percentage < 70:
+                        bullets_needed = suggested + 4  # Aggressive: +4 buffer
+                    elif page_feedback.fill_percentage < 85:
+                        bullets_needed = suggested + 3  # Moderate: +3 buffer
+                    else:
+                        bullets_needed = suggested + 2  # Standard: +2 buffer
             except:
-                bullets_needed = 8
+                # Fallback if parsing fails
+                if page_feedback.fill_percentage < 70:
+                    bullets_needed = 12
+                else:
+                    bullets_needed = 8
         
         improvement_prompt = f"""You are an expert resume writer. The previous attempt scored {ats_feedback.overall}/100 and is {page_feedback.fill_percentage if page_feedback else 0}% filled.
 
@@ -427,11 +438,19 @@ Return valid JSON:
             for bullet in exp.bullets:
                 # Check if this bullet should be replaced
                 replaced = False
+                normalized_bullet = bullet.lower().strip().strip('."')
+                
                 for weak, better in replacement_map.items():
-                    if weak.lower().strip() in bullet.lower().strip() or bullet.lower().strip() in weak.lower().strip():
+                    normalized_weak = weak.lower().strip().strip('."')
+                    
+                    # Fuzzy match: if weak bullet text is largely contained in current bullet
+                    # or if current bullet is largely contained in weak bullet text
+                    if (normalized_weak in normalized_bullet and len(normalized_weak) > 10) or \
+                       (normalized_bullet in normalized_weak and len(normalized_bullet) > 10):
                         updated_bullets.append(better)
                         replaced = True
                         break
+                        
                 if not replaced:
                     updated_bullets.append(bullet)
             exp.bullets = updated_bullets
@@ -441,25 +460,33 @@ Return valid JSON:
 
         # Distribute remaining NEW bullets across roles to fill page
         if new_bullets and sorted_exp:
-            for i, bullet in enumerate(new_bullets):
-                # Hard caps to prevent 3-page spillover:
-                # Role 0 (most recent): max 10 bullets
-                # Others: max 6 bullets
+            # Determine dynamic caps based on current page count
+            # If we are on page 1 of 1, we should be generous to fill it.
+            # If we are on page 3+, we should be strict to reduce length.
+            current_pages = len(resume.pages) if hasattr(resume, 'pages') else 1
+            
+            if current_pages == 1:
+                max_recent = 15  # Allow deep depth for single page
+                max_older = 8
+            else:
+                max_recent = 10 # Standard cap for multi-page
+                max_older = 6
                 
+            for i, bullet in enumerate(new_bullets):
                 # Try to add to role 0 first if it has space
-                if len(sorted_exp[0].bullets) < 10:
+                if len(sorted_exp[0].bullets) < max_recent:
                     sorted_exp[0].bullets.append(bullet)
                     continue
                 
-                # Otherwise, try to find another role with space (< 6 bullets)
+                # Otherwise, try to find another role with space
                 added = False
                 for exp in sorted_exp[1:]:
-                    if len(exp.bullets) < 6:
+                    if len(exp.bullets) < max_older:
                         exp.bullets.append(bullet)
                         added = True
                         break
                 
-                # If all roles are capped, stop adding to prevent 3-page spillover
+                # If all roles are capped, stop adding
                 if not added:
                     break
             
