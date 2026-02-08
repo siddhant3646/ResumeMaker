@@ -135,7 +135,7 @@ class RoleDetector:
     
     def _ai_analyze_jd(self, jd_text: str) -> Dict:
         """Use AI for deeper JD analysis"""
-        if not self.available or not self.model:
+        if not self.available or not self.client:
             return {}
         
         prompt = f"""Analyze this job description and extract key information. Return JSON only:
