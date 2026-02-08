@@ -323,11 +323,53 @@ class ContentGenerator:
             return False
         
         def transform_skill(skill: str) -> str:
-            """Transform skill: replace / with , for readability"""
-            # Replace "/" with ", " for skills like "AWS/GCP/Azure"
-            if '/' in skill:
-                return skill.replace('/', ', ')
-            return skill
+            """Transform skill: replace / with , and normalize capitalization"""
+            # Known proper capitalizations
+            proper_caps = {
+                'java': 'Java', 'javascript': 'JavaScript', 'typescript': 'TypeScript',
+                'python': 'Python', 'nodejs': 'NodeJS', 'node.js': 'Node.js',
+                'reactjs': 'ReactJS', 'react': 'React', 'angular': 'Angular',
+                'vue': 'Vue', 'vuejs': 'VueJS', 'nextjs': 'Next.js',
+                'spring boot': 'Spring Boot', 'spring': 'Spring', 'hibernate': 'Hibernate',
+                'aws': 'AWS', 'gcp': 'GCP', 'azure': 'Azure',
+                'docker': 'Docker', 'kubernetes': 'Kubernetes', 'k8s': 'K8s',
+                'mongodb': 'MongoDB', 'mysql': 'MySQL', 'postgresql': 'PostgreSQL',
+                'redis': 'Redis', 'kafka': 'Kafka', 'rabbitmq': 'RabbitMQ',
+                'graphql': 'GraphQL', 'rest': 'REST', 'grpc': 'gRPC',
+                'ci/cd': 'CI/CD', 'ci cd': 'CI/CD', 'jenkins': 'Jenkins',
+                'terraform': 'Terraform', 'ansible': 'Ansible',
+                'jira': 'Jira', 'confluence': 'Confluence', 'gitlab': 'GitLab',
+                'github': 'GitHub', 'bitbucket': 'Bitbucket',
+                'intellij': 'IntelliJ', 'vscode': 'VSCode',
+                'junit': 'JUnit', 'pytest': 'PyTest', 'selenium': 'Selenium',
+                'elasticsearch': 'Elasticsearch', 'kibana': 'Kibana', 'grafana': 'Grafana',
+                'prometheus': 'Prometheus', 'splunk': 'Splunk', 'datadog': 'Datadog',
+                'apache spark': 'Apache Spark', 'apache kafka': 'Apache Kafka',
+                'apache flink': 'Apache Flink', 'hadoop': 'Hadoop', 'hive': 'Hive',
+                'airflow': 'Airflow', 'mlflow': 'MLflow',
+                'nosql': 'NoSQL', 'sql': 'SQL', 'plsql': 'PL/SQL',
+                'oauth': 'OAuth', 'jwt': 'JWT', 'saml': 'SAML',
+                'solid': 'SOLID', 'oop': 'OOP', 'ddd': 'DDD', 'tdd': 'TDD',
+                'api': 'API', 'sdk': 'SDK', 'cli': 'CLI',
+                'json': 'JSON', 'xml': 'XML', 'yaml': 'YAML',
+                'html': 'HTML', 'css': 'CSS', 'sass': 'SASS', 'less': 'LESS',
+                'go': 'Go', 'golang': 'Golang', 'rust': 'Rust', 'kotlin': 'Kotlin',
+                'scala': 'Scala', 'c++': 'C++', 'c#': 'C#',
+                'fortify': 'Fortify', 'sonarqube': 'SonarQube',
+                'maven': 'Maven', 'gradle': 'Gradle', 'npm': 'npm',
+                'postman': 'Postman', 'swagger': 'Swagger', 'openapi': 'OpenAPI',
+            }
+            
+            # Replace "/" with ", "
+            result = skill.replace('/', ', ') if '/' in skill else skill
+            
+            # Check for known proper capitalization
+            lower = result.lower().strip()
+            if lower in proper_caps:
+                return proper_caps[lower]
+            
+            # For unknown skills, use title case
+            return result.title()
         
         # Combine all skills for analysis
         all_skills = skills.languages_frameworks + skills.tools
