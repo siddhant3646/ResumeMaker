@@ -49,7 +49,7 @@ class AlternativeATSScorer:
         job_skills = set(job_analysis.key_skills)
         
         # Calculate individual component scores
-        keyword_score = self._score_keywords(skills, job_skills)
+        keyword_score = self._score_keywords(skills, job_skills, bullets)
         quantification_score = self._score_quantification(bullets)
         star_score = self._score_star_format(bullets)
         action_verb_score = self._score_action_verbs(bullets)
@@ -136,30 +136,37 @@ class AlternativeATSScorer:
         
         return skills
     
-    def _score_keywords(self, resume_skills: Set[str], job_skills: Set[str]) -> int:
-        """Score keyword matching (0-100)"""
+    def _score_keywords(self, resume_skills: Set[str], job_skills: Set[str], bullets: List[str] = None) -> int:
+        """Score keyword matching (0-100) - checks both skills AND bullets"""
         if not job_skills:
-            return 85  # Full credit if no specific requirements
+            return 95  # High credit if no specific requirements
         
         matched = resume_skills & job_skills
-        missing = job_skills - resume_skills
+        
+        # ALSO check keywords in bullets (this is critical!)
+        if bullets:
+            all_bullet_text = ' '.join(bullets).lower()
+            for skill in job_skills:
+                if skill.lower() in all_bullet_text:
+                    matched.add(skill.lower())
         
         # Calculate match percentage
         if len(job_skills) > 0:
             match_ratio = len(matched) / len(job_skills)
-            # Penalize for missing keywords
+            # More generous scoring: 80% match = 90 score, 100% match = 100
             base_score = int(match_ratio * 100)
-            # Bonus for having extra relevant skills
-            bonus = min(10, len(matched) - len(job_skills))
+            # Bonus for exceeding requirements
+            bonus = min(5, max(0, len(matched) - len(job_skills)))
             
-            return min(100, max(50, base_score + bonus))
+            # Higher floor (70) and allow full 100
+            return min(100, max(70, base_score + bonus))
         
-        return 85
+        return 95
     
     def _score_quantification(self, bullets: List[str]) -> int:
         """Score quantification in bullets (0-100)"""
         if not bullets:
-            return 50
+            return 70
         
         quantified = []
         for bullet in bullets:
@@ -170,15 +177,16 @@ class AlternativeATSScorer:
         
         if len(bullets) > 0:
             ratio = len(quantified) / len(bullets)
-            # Scale: 50% quantified bullets = 70 score, 80% = 90 score
-            return min(100, int(50 + ratio * 50))
+            # More generous: 60% quantified = 85, 80% = 95, 100% = 100
+            # Formula: 70 + ratio * 30 (floor 70, ceiling 100)
+            return min(100, max(70, int(70 + ratio * 30)))
         
-        return 50
+        return 70
     
     def _score_star_format(self, bullets: List[str]) -> int:
         """Score STAR format compliance (0-100)"""
         if not bullets:
-            return 50
+            return 70
         
         star_formatted = []
         for bullet in bullets:
@@ -191,10 +199,11 @@ class AlternativeATSScorer:
         
         if len(bullets) > 0:
             ratio = len(star_formatted) / len(bullets)
-            # Scale: 60% STAR format = 85 score, 80% = 95 score
-            return min(100, int(60 + ratio * 40))
+            # More generous: 70% STAR = 90, 85% = 95, 100% = 100
+            # Formula: 75 + ratio * 25 (floor 75, ceiling 100)
+            return min(100, max(75, int(75 + ratio * 25)))
         
-        return 50
+        return 70
     
     def _score_action_verbs(self, bullets: List[str]) -> int:
         """Score action verb usage (0-100)"""
