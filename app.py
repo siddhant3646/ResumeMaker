@@ -634,8 +634,11 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 st.session_state.last_page_status = page_status
                 
                 # Show page status in UI
+                needs_consolidate = "CONSOLIDATE" in (page_status.suggestion or "")
                 if page_status.needs_content:
                     st.warning(f"⚠️ Page {page_status.current_page}: {page_status.fill_percentage}% filled (need 95%)")
+                elif needs_consolidate:
+                    st.warning(f"⚠️ Page {page_status.current_page} is sparse ({page_status.fill_percentage}%). Will consolidate to fit on 1 page.")
                 else:
                     st.success(f"✅ Perfect page fill: {page_status.fill_percentage}%")
                     
@@ -698,7 +701,9 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 
                 # Check if meets target (BOTH ATS score AND page fill)
                 ats_passed = tailored.ats_score.overall >= config.target_ats_score
-                page_passed = page_status is not None and not page_status.needs_content
+                # page_passed only if no content needed AND no consolidation needed
+                needs_consolidate = page_status is not None and "CONSOLIDATE" in (page_status.suggestion or "")
+                page_passed = page_status is not None and not page_status.needs_content and not needs_consolidate
                 page_fill_pct = page_status.fill_percentage if page_status else "N/A"
                 
                 if ats_passed and page_passed:
