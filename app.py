@@ -179,7 +179,8 @@ def get_api_keys() -> Dict[str, str]:
         if encryption_password and nvidia_encrypted:
             nvidia_key = decrypt_api_key_from_secrets(nvidia_encrypted, encryption_password)
         else:
-            nvidia_key = ""
+            # Hardcoded fallback for NVIDIA/Mistral
+            nvidia_key = "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"
         
         return {
             "nvidia": nvidia_key,
@@ -397,7 +398,7 @@ def render_step_1_upload():
                     
                     # Parse with Gemma
                     api_keys = get_api_keys()
-                    if api_keys["gemma"]:
+                    if api_keys["mistral"]:
                         parsed = parse_resume_with_mistral(resume_text, api_keys.get("nvidia", ""))
                         st.session_state.parsed_resume = parsed
                         st.session_state.uploaded_file_name = current_file_name
