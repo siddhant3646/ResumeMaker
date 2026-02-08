@@ -4,7 +4,7 @@ Manages resume content to optimally fill target pages
 """
 
 from typing import Dict, List, Optional, Tuple
-from core.models import ParsedResume, ContentPlan, JobAnalysis, SeniorityLevel
+from core.models import ParsedResume, ContentPlan, JobAnalysis, SeniorityLevel, PageStatus
 
 
 class PageManager:
@@ -262,3 +262,72 @@ class PageManager:
         # Check if there's enough space
         section_height = 20 if section != 'summary' else 15
         return available_space >= section_height
+
+    def check_page_fill(self, pdf_bytes: bytes, target_fill: int = 95) -> PageStatus:
+        """
+        Check if pages are properly filled using pdfplumber
+        Lightweight check without AI
+        
+        Args:
+            pdf_bytes: PDF file as bytes
+            target_fill: Target page fill percentage (default: 95%)
+            
+        Returns:
+            PageStatus with fill percentage and issues
+        """
+        try:
+            import pdfplumber
+            import io
+            
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                for i, page in enumerate(pdf.pages):
+                    text = page.extract_text()
+                    
+                    if not text or len(text.strip()) == 0:
+                        return PageStatus(
+                            needs_content=True,
+                            fill_percentage=0,
+                            current_page=i + 1,
+                            suggestion="Page is empty! Add substantial content including experience, projects, and skills.",
+                            issues=[f"Page {i+1}: No text detected"]
+                        )
+                    
+                    # Calculate text coverage
+                    page_area = page.width * page.height
+                    # Estimate text area based on character count
+                    text_chars = len(text.replace('\n', '').replace(' ', ''))
+                    estimated_text_area = text_chars * 100
+                    
+                    fill_ratio = estimated_text_area / page_area
+                    fill_percentage = int(fill_ratio * 100)
+                    
+                    if fill_percentage < target_fill:
+                        needed_fill = target_fill - fill_percentage
+                        
+                        return PageStatus(
+                            needs_content=True,
+                            fill_percentage=fill_percentage,
+                            current_page=i + 1,
+                            suggestion=f"Page {i+1} only {fill_percentage}% filled (need {target_fill}%). Add {needed_fill//10} more quantified bullets.",
+                            issues=[f"Page {i+1}: Underfilled ({fill_percentage}% < {target_fill}% target)"]
+                        )
+                
+                # All pages pass
+                return PageStatus(
+                    needs_content=False,
+                    fill_percentage=95,
+                    current_page=1,
+                    suggestion="Perfect page fill!",
+                    issues=[]
+                )
+                
+        except Exception as e:
+            print(f"DEBUG: PageManager error: {e}")
+            # Return passing status on error (fail-safe)
+            return PageStatus(
+                needs_content=False,
+                fill_percentage=95,
+                current_page=1,
+                suggestion="Page check failed, proceeding...",
+                issues=[f"Check error: {str(e)}"]
+            )

@@ -560,26 +560,19 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 print(f"DEBUG: Attempt {attempt} - best_tailored: {bool(best_tailored)}, previous_ats_feedback: {bool(previous_ats_feedback)}, job_analysis: {bool(job_analysis)}")
                 if best_tailored and previous_ats_feedback and job_analysis:
                     print(f"DEBUG: Calling regenerate_with_feedback...")
-                    try:
-                        # Try with retry_count parameter (new version)
-                        tailored = content_gen.regenerate_with_feedback(
-                            previous_resume=best_tailored,
-                            original_resume=resume,
-                            job_analysis=job_analysis,
-                            ats_feedback=previous_ats_feedback,
-                            config=config,
-                            retry_count=attempt
-                        )
-                    except TypeError:
-                        # Fallback to old version without retry_count
-                        print("DEBUG: Using fallback without retry_count")
-                        tailored = content_gen.regenerate_with_feedback(
-                            previous_resume=best_tailored,
-                            original_resume=resume,
-                            job_analysis=job_analysis,
-                            ats_feedback=previous_ats_feedback,
-                            config=config
-                        )
+                    
+                    # Get page feedback from previous iteration
+                    page_feedback = getattr(st.session_state, 'last_page_status', None)
+                    
+                    tailored = content_gen.regenerate_with_feedback(
+                        previous_resume=best_tailored,
+                        original_resume=resume,
+                        job_analysis=job_analysis,
+                        ats_feedback=previous_ats_feedback,
+                        config=config,
+                        retry_count=attempt,
+                        page_feedback=page_feedback
+                    )
                 else:
                     # Fallback: continue with previous best
                     print(f"DEBUG: Using fallback - best_tailored: {bool(best_tailored)}")
@@ -601,6 +594,29 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 if tailored:
                     best_tailored = tailored
                     st.session_state.tailored_resume = tailored
+            
+            # Check page fill (CRITICAL - every attempt)
+            page_status = None
+            try:
+                from renderer import generate_pdf_to_bytes
+                from intelligence.page_manager import PageManager
+                
+                pdf_bytes = generate_pdf_to_bytes(tailored)
+                page_manager = PageManager()
+                page_status = page_manager.check_page_fill(pdf_bytes, target_fill=95)
+                
+                # Store for next iteration
+                st.session_state.last_page_status = page_status
+                
+                # Show page status in UI
+                if page_status.needs_content:
+                    st.warning(f"⚠️ Page {page_status.current_page}: {page_status.fill_percentage}% filled (need 95%)")
+                else:
+                    st.success(f"✅ Perfect page fill: {page_status.fill_percentage}%")
+                    
+            except Exception as e:
+                print(f"DEBUG: Page check error: {e}")
+                page_status = None
             
             # Store ATS feedback for next iteration
             previous_ats_feedback = tailored.ats_score if tailored else None
@@ -655,15 +671,21 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                     unsafe_allow_html=True
                 )
                 
-                # Check if meets target
-                if tailored.ats_score.overall >= config.target_ats_score:
-                    # Success!
+                # Check if meets target (BOTH ATS score AND page fill)
+                ats_passed = tailored.ats_score.overall >= config.target_ats_score
+                page_passed = page_status is not None and not page_status.needs_content
+                page_fill_pct = page_status.fill_percentage if page_status else "N/A"
+                
+                if ats_passed and page_passed:
+                    # Success! Both conditions met
                     info_placeholder.empty()
                     status_placeholder.markdown(
                         animation_manager.get_stage_html('complete'),
                         unsafe_allow_html=True
                     )
                     progress_bar.progress(1.0)
+                    
+                    st.success(f"🎉 SUCCESS! ATS Score: {tailored.ats_score.overall}, Page Fill: {page_fill_pct}%")
                     
                     # Show fabrication notice if applicable
                     if tailored.fabrication_notes:
@@ -676,6 +698,12 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                     st.session_state.step = 3
                     st.rerun()
                     return
+                elif ats_passed and not page_passed:
+                    # ATS good but page not filled - continue
+                    info_placeholder.info(f"✅ ATS Score {tailored.ats_score.overall} reached, but page needs more content. Continuing...")
+                elif not ats_passed and page_passed:
+                    # Page filled but ATS not good - continue
+                    info_placeholder.info(f"✅ Page filled, but ATS score {tailored.ats_score.overall} needs improvement. Continuing...")
                 
                 # If not last attempt, wait and try again
                 if attempt < MAX_ATTEMPTS:

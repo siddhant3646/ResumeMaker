@@ -154,6 +154,15 @@ class ATSScore(BaseModel):
         return self.overall >= 90
 
 
+class PageStatus(BaseModel):
+    """Result of page fill analysis (lightweight check)"""
+    needs_content: bool = False
+    fill_percentage: int = 95
+    current_page: int = 1
+    suggestion: str = ""
+    issues: List[str] = []
+
+
 class ValidationReport(BaseModel):
     """PDF validation report from vision model"""
     page_count: int

@@ -260,276 +260,282 @@ class ContentGenerator:
         }
     
     def regenerate_with_feedback(
-        self,
-        previous_resume: TailoredResume,
-        original_resume: ParsedResume,
-        job_analysis: JobAnalysis,
-        ats_feedback: 'ATSScore',
-        config: GenerationConfig,
-        retry_count: int = 1  # Track retry attempt for scoring boost
-    ) -> TailoredResume:
-        """
-        Regenerate resume using Gemma's ATS feedback to fix shortcomings.
-        Uses the shortcomings, missing_keywords, and weak_bullets from ATS scoring.
-        """
-        print(f"DEBUG: regenerate_with_feedback called with score {ats_feedback.overall}")
+            self,
+            previous_resume: TailoredResume,
+            original_resume: ParsedResume,
+            job_analysis: JobAnalysis,
+            ats_feedback: 'ATSScore',
+            config: GenerationConfig,
+            retry_count: int = 1,
+            page_feedback = None  # NEW: PageStatus object
+        ) -> TailoredResume:
+            """
+            Regenerate resume using Gemma's ATS feedback to fix shortcomings.
+            Uses the shortcomings, missing_keywords, and weak_bullets from ATS scoring.
+            """
+            print(f"DEBUG: regenerate_with_feedback called with score {ats_feedback.overall}, retry {retry_count}")
         
-        """
-        Regenerate resume using Gemma's ATS feedback to fix shortcomings.
-        Uses the shortcomings, missing_keywords, and weak_bullets from ATS scoring.
-        """
-        import requests
-        
-        # Build improvement prompt with ATS feedback
-        shortcomings = "\n".join(f"- {s}" for s in ats_feedback.shortcomings[:5])
-        missing_kw = ", ".join(ats_feedback.missing_keywords[:10])
-        weak_bullets_text = "\n".join(f"- {b}" for b in ats_feedback.weak_bullets[:5])
-        
-        improvement_prompt = f"""You are an expert resume writer. The previous resume attempt scored {ats_feedback.overall}/100 on ATS.
-To pass FAANG standards, it needs >90.
-
-**JOB REQUIREMENTS:**
-- Role: {job_analysis.role_title}
-- Seniority: {job_analysis.seniority_level.value}
-- Required Skills: {', '.join(job_analysis.key_skills[:10])}
-
-**SHORTCOMINGS FROM ATS EVALUATION (FIX THESE):**
-{shortcomings}
-
-**MISSING KEYWORDS (MUST ADD THESE):**
-{missing_kw}
-
-**WEAK BULLETS TO IMPROVE:**
-{weak_bullets_text}
-
-**CURRENT BULLETS:**
-{self._format_current_bullets(previous_resume)}
-
-**YOUR TASK:**
-Generate improved bullet points that:
-1. Include ALL missing keywords naturally
-2. Fix the shortcomings identified
-3. Use STAR format (Situation, Task, Action, Result)
-4. Include quantified metrics (%, $, scale like K/M)
-5. Start with strong action verbs (Architected, Engineered, Spearheaded)
-
-Return a JSON array of improved bullets:
-{{"improved_bullets": ["bullet 1", "bullet 2", ...]}}
-"""
-        
-        try:
-            # Use AI model (KimiK2.5 primary, StepFun fallback) for regeneration
-            print(f"DEBUG: Starting regeneration with {len(ats_feedback.shortcomings)} shortcomings")
-            improved_bullets = self._call_ai_model_for_improvement(improvement_prompt)
-            
-            # Apply improvements to resume
-            print(f"DEBUG: Applying {len(improved_bullets)} improvements to resume")
-            improved_resume = self._apply_improvements(
-                previous_resume, improved_bullets, job_analysis, ats_feedback
-            )
-            
-            # Recalculate ATS score
-            print(f"DEBUG: Regeneration - Calculating ATS score using {'hybrid' if self.use_hybrid_scoring else 'AI'} scorer (retry {retry_count})")
-            if self.use_hybrid_scoring and hasattr(self, 'hybrid_scorer'):
-                improved_resume.ats_score = self.hybrid_scorer.calculate_score(
-                    improved_resume, job_analysis, retry_count=retry_count
+            # Add page fill feedback if provided
+            if page_feedback and page_feedback.needs_content:
+                print(f"DEBUG: Page feedback received - {page_feedback.fill_percentage}% filled")
+                ats_feedback.shortcomings.append(f"PAGE FILL: {page_feedback.suggestion}")
+                ats_feedback.suggestions.append(
+                    f"Add {3 if page_feedback.fill_percentage < 80 else 2} fabricated quantified achievements to fill page properly. "
+                    "Include specific metrics like percentages, dollar amounts, or user counts."
                 )
-                print(f"DEBUG: Hybrid regeneration score: {improved_resume.ats_score.overall}")
-            else:
-                improved_resume.ats_score = self.ats_scorer.calculate_score(
-                    improved_resume, job_analysis
+        
+            import requests
+        
+            # Build improvement prompt with ATS feedback
+            shortcomings = "\n".join(f"- {s}" for s in ats_feedback.shortcomings[:5])
+            missing_kw = ", ".join(ats_feedback.missing_keywords[:10])
+            weak_bullets_text = "\n".join(f"- {b}" for b in ats_feedback.weak_bullets[:5])
+        
+            improvement_prompt = f"""You are an expert resume writer. The previous resume attempt scored {ats_feedback.overall}/100 on ATS.
+    To pass FAANG standards, it needs >90.
+
+    **JOB REQUIREMENTS:**
+    - Role: {job_analysis.role_title}
+    - Seniority: {job_analysis.seniority_level.value}
+    - Required Skills: {', '.join(job_analysis.key_skills[:10])}
+
+    **SHORTCOMINGS FROM ATS EVALUATION (FIX THESE):**
+    {shortcomings}
+
+    **MISSING KEYWORDS (MUST ADD THESE):**
+    {missing_kw}
+
+    **WEAK BULLETS TO IMPROVE:**
+    {weak_bullets_text}
+
+    **CURRENT BULLETS:**
+    {self._format_current_bullets(previous_resume)}
+
+    **YOUR TASK:**
+    Generate improved bullet points that:
+    1. Include ALL missing keywords naturally
+    2. Fix the shortcomings identified
+    3. Use STAR format (Situation, Task, Action, Result)
+    4. Include quantified metrics (%, $, scale like K/M)
+    5. Start with strong action verbs (Architected, Engineered, Spearheaded)
+
+    Return a JSON array of improved bullets:
+    {{"improved_bullets": ["bullet 1", "bullet 2", ...]}}
+    """
+        
+            try:
+                # Use AI model (KimiK2.5 primary, StepFun fallback) for regeneration
+                print(f"DEBUG: Starting regeneration with {len(ats_feedback.shortcomings)} shortcomings")
+                improved_bullets = self._call_ai_model_for_improvement(improvement_prompt)
+            
+                # Apply improvements to resume
+                print(f"DEBUG: Applying {len(improved_bullets)} improvements to resume")
+                improved_resume = self._apply_improvements(
+                    previous_resume, improved_bullets, job_analysis, ats_feedback
                 )
             
-            improved_resume.fabrication_notes.append(
-                f"Regenerated with ATS feedback. Previous score: {ats_feedback.overall}"
-            )
+                # Recalculate ATS score
+                print(f"DEBUG: Regeneration - Calculating ATS score using {'hybrid' if self.use_hybrid_scoring else 'AI'} scorer (retry {retry_count})")
+                if self.use_hybrid_scoring and hasattr(self, 'hybrid_scorer'):
+                    improved_resume.ats_score = self.hybrid_scorer.calculate_score(
+                        improved_resume, job_analysis, retry_count=retry_count
+                    )
+                    print(f"DEBUG: Hybrid regeneration score: {improved_resume.ats_score.overall}")
+                else:
+                    improved_resume.ats_score = self.ats_scorer.calculate_score(
+                        improved_resume, job_analysis
+                    )
             
-            print(f"DEBUG: Returning improved resume with {len(improved_resume.fabrication_notes)} fabrication notes")
-            return improved_resume
+                improved_resume.fabrication_notes.append(
+                    f"Regenerated with ATS feedback. Previous score: {ats_feedback.overall}"
+                )
             
-        except Exception as e:
-            # Fallback: just return previous with note
-            previous_resume.fabrication_notes.append(f"Regeneration failed: {str(e)}")
-            return previous_resume
-    
+                print(f"DEBUG: Returning improved resume with {len(improved_resume.fabrication_notes)} fabrication notes")
+                return improved_resume
+            
+            except Exception as e:
+                # Fallback: just return previous with note
+                previous_resume.fabrication_notes.append(f"Regeneration failed: {str(e)}")
+                return previous_resume
+
     def _format_current_bullets(self, resume: TailoredResume) -> str:
-        """Format current bullets for the improvement prompt"""
-        lines = []
-        for exp in resume.experience:
-            lines.append(f"\n[{exp.company} - {exp.role}]")
-            for bullet in exp.bullets:
-                lines.append(f"  - {bullet}")
-        return "\n".join(lines)
+            """Format current bullets for the improvement prompt"""
+            lines = []
+            for exp in resume.experience:
+                lines.append(f"\n[{exp.company} - {exp.role}]")
+                for bullet in exp.bullets:
+                    lines.append(f"  - {bullet}")
+            return "\n".join(lines)
     
     def _call_ai_model_for_improvement(self, prompt: str) -> List[str]:
-        """Call AI model (KimiK2.5 primary, StepFun fallback) to get improved bullets"""
-        import requests
-        import json
+            """Call AI model (KimiK2.5 primary, StepFun fallback) to get improved bullets"""
+            import requests
+            import json
         
-        # Try KimiK2.5 first
-        try:
-            result = self._call_kimi_k2_5(prompt)
-            print(f"DEBUG: KimiK2.5 returned {len(result)} improved bullets")
-            return result
-        except Exception as e:
-            print(f"KimiK2.5 failed: {e}, trying StepFun fallback...")
+            # Try KimiK2.5 first
             try:
-                result = self._call_stepfun_flash(prompt)
-                print(f"DEBUG: StepFun returned {len(result)} improved bullets")
+                result = self._call_kimi_k2_5(prompt)
+                print(f"DEBUG: KimiK2.5 returned {len(result)} improved bullets")
                 return result
-            except Exception as e2:
-                print(f"Both models failed: {e2}")
-                return []
+            except Exception as e:
+                print(f"KimiK2.5 failed: {e}, trying StepFun fallback...")
+                try:
+                    result = self._call_stepfun_flash(prompt)
+                    print(f"DEBUG: StepFun returned {len(result)} improved bullets")
+                    return result
+                except Exception as e2:
+                    print(f"Both models failed: {e2}")
+                    return []
     
     def _call_kimi_k2_5(self, prompt: str) -> List[str]:
-        """Call KimiK2.5 via NVIDIA API"""
-        import requests
-        import json
+            """Call KimiK2.5 via NVIDIA API"""
+            import requests
+            import json
         
-        url = "https://integrate.api.nvidia.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.nvidia_api_key}",
-            "Content-Type": "application/json"
-        }
+            url = "https://integrate.api.nvidia.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.nvidia_api_key}",
+                "Content-Type": "application/json"
+            }
         
-        payload = {
-            "model": "moonshotai/kimi-k2.5",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 1.00,
-            "top_p": 1.00,
-            "max_tokens": 32000,
-            "chat_template_kwargs": {"thinking": True},
-            "stream": False
-        }
+            payload = {
+                "model": "moonshotai/kimi-k2.5",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 1.00,
+                "top_p": 1.00,
+                "max_tokens": 32000,
+                "chat_template_kwargs": {"thinking": True},
+                "stream": False
+            }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=180)
-        response.raise_for_status()
+            response = requests.post(url, headers=headers, json=payload, timeout=180)
+            response.raise_for_status()
         
-        result = response.json()
-        content = result["choices"][0]["message"]["content"]
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
         
-        # Parse JSON from response
-        import re
-        json_match = re.search(r'\{[\s\S]*\}', content)
-        if json_match:
-            data = json.loads(json_match.group())
-            return data.get("improved_bullets", [])
-        
-        return []
-    
-    def _call_stepfun_flash(self, prompt: str) -> List[str]:
-        """Call StepFun Flash via OpenAI Client"""
-        import json
-        try:
-            from openai import OpenAI
-            
-            client = OpenAI(
-                base_url="https://integrate.api.nvidia.com/v1",
-                api_key=self.nvidia_api_key
-            )
-            
-            response = client.chat.completions.create(
-                model="stepfun-ai/step-3.5-flash",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=32000,
-                temperature=0.7
-            )
-            
-            content = response.choices[0].message.content if response.choices else ""
-            
             # Parse JSON from response
             import re
-            if content:
-                json_match = re.search(r'\{[\s\S]*\}', content)
-                if json_match:
-                    data = json.loads(json_match.group())
-                    return data.get("improved_bullets", [])
-                else:
-                    print(f"DEBUG: No JSON found in StepFun response: {content[:200]}...")
-                    return []
-            else:
-                print("DEBUG: No content in StepFun response")
-                return []
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                data = json.loads(json_match.group())
+                return data.get("improved_bullets", [])
+        
+            return []
+    
+    def _call_stepfun_flash(self, prompt: str) -> List[str]:
+            """Call StepFun Flash via OpenAI Client"""
+            import json
+            try:
+                from openai import OpenAI
             
-        except ImportError:
-            # Fallback if OpenAI not available
-            raise Exception("StepFun fallback requires 'openai' library")
-        except Exception as e:
-            raise Exception(f"StepFun API call failed: {e}")
+                client = OpenAI(
+                    base_url="https://integrate.api.nvidia.com/v1",
+                    api_key=self.nvidia_api_key
+                )
+            
+                response = client.chat.completions.create(
+                    model="stepfun-ai/step-3.5-flash",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=32000,
+                    temperature=0.7
+                )
+            
+                content = response.choices[0].message.content if response.choices else ""
+            
+                # Parse JSON from response
+                import re
+                if content:
+                    json_match = re.search(r'\{[\s\S]*\}', content)
+                    if json_match:
+                        data = json.loads(json_match.group())
+                        return data.get("improved_bullets", [])
+                    else:
+                        print(f"DEBUG: No JSON found in StepFun response: {content[:200]}...")
+                        return []
+                else:
+                    print("DEBUG: No content in StepFun response")
+                    return []
+            
+            except ImportError:
+                # Fallback if OpenAI not available
+                raise Exception("StepFun fallback requires 'openai' library")
+            except Exception as e:
+                raise Exception(f"StepFun API call failed: {e}")
     
     def _apply_improvements(
-        self,
-        resume: TailoredResume,
-        improved_bullets: List[str],
-        job_analysis: JobAnalysis,
-        ats_feedback: 'ATSScore'
-    ) -> TailoredResume:
-        """Apply improved bullets to resume"""
-        from copy import deepcopy
+            self,
+            resume: TailoredResume,
+            improved_bullets: List[str],
+            job_analysis: JobAnalysis,
+            ats_feedback: 'ATSScore'
+        ) -> TailoredResume:
+            """Apply improved bullets to resume"""
+            from copy import deepcopy
         
-        improved = deepcopy(resume)
+            improved = deepcopy(resume)
         
-        # Add missing keywords to skills
-        if improved.skills and ats_feedback.missing_keywords:
-            added_keywords = []
-            for kw in ats_feedback.missing_keywords:
-                kw_lower = kw.lower()
-                existing_skills = [s.lower() for s in improved.skills.languages_frameworks + improved.skills.tools]
+            # Add missing keywords to skills
+            if improved.skills and ats_feedback.missing_keywords:
+                added_keywords = []
+                for kw in ats_feedback.missing_keywords:
+                    kw_lower = kw.lower()
+                    existing_skills = [s.lower() for s in improved.skills.languages_frameworks + improved.skills.tools]
                 
-                if kw_lower not in existing_skills:
-                    # Add to appropriate category
-                    if any(tech in kw_lower for tech in ['python', 'java', 'javascript', 'typescript', 'react', 'node', 'angular']):
-                        if kw_lower not in [s.lower() for s in improved.skills.languages_frameworks]:
-                            improved.skills.languages_frameworks.append(kw)
-                            added_keywords.append(kw)
+                    if kw_lower not in existing_skills:
+                        # Add to appropriate category
+                        if any(tech in kw_lower for tech in ['python', 'java', 'javascript', 'typescript', 'react', 'node', 'angular']):
+                            if kw_lower not in [s.lower() for s in improved.skills.languages_frameworks]:
+                                improved.skills.languages_frameworks.append(kw)
+                                added_keywords.append(kw)
+                        else:
+                            if kw_lower not in [s.lower() for s in improved.skills.tools]:
+                                improved.skills.tools.append(kw)
+                                added_keywords.append(kw)
+            
+                if added_keywords:
+                    print(f"DEBUG: Added keywords to skills: {added_keywords}")
+                else:
+                    print(f"DEBUG: No new keywords added (already present)")
+        
+            # Replace weak bullets with improved ones
+            bullet_idx = 0
+            weak_set = set(b.lower().strip() for b in ats_feedback.weak_bullets)
+        
+            # Debug: Print what we're working with
+            print(f"DEBUG: Weak bullets to replace: {ats_feedback.weak_bullets[:3]}")
+            print(f"DEBUG: Improved bullets available: {improved_bullets[:3]}")
+            print(f"DEBUG: Missing keywords to add: {ats_feedback.missing_keywords[:5]}")
+        
+            for exp in improved.experience:
+                new_bullets = []
+                for bullet in exp.bullets:
+                    if bullet.lower().strip() in weak_set and bullet_idx < len(improved_bullets):
+                        # Replace with improved bullet
+                        new_bullets.append(improved_bullets[bullet_idx])
+                        print(f"DEBUG: Replaced bullet: {bullet[:50]}... -> {improved_bullets[bullet_idx][:50]}...")
+                        bullet_idx += 1
                     else:
-                        if kw_lower not in [s.lower() for s in improved.skills.tools]:
-                            improved.skills.tools.append(kw)
-                            added_keywords.append(kw)
+                        # Keep original bullet
+                        new_bullets.append(bullet)
             
-            if added_keywords:
-                print(f"DEBUG: Added keywords to skills: {added_keywords}")
-            else:
-                print(f"DEBUG: No new keywords added (already present)")
-        
-        # Replace weak bullets with improved ones
-        bullet_idx = 0
-        weak_set = set(b.lower().strip() for b in ats_feedback.weak_bullets)
-        
-        # Debug: Print what we're working with
-        print(f"DEBUG: Weak bullets to replace: {ats_feedback.weak_bullets[:3]}")
-        print(f"DEBUG: Improved bullets available: {improved_bullets[:3]}")
-        print(f"DEBUG: Missing keywords to add: {ats_feedback.missing_keywords[:5]}")
-        
-        for exp in improved.experience:
-            new_bullets = []
-            for bullet in exp.bullets:
-                if bullet.lower().strip() in weak_set and bullet_idx < len(improved_bullets):
-                    # Replace with improved bullet
-                    new_bullets.append(improved_bullets[bullet_idx])
-                    print(f"DEBUG: Replaced bullet: {bullet[:50]}... -> {improved_bullets[bullet_idx][:50]}...")
-                    bullet_idx += 1
-                else:
-                    # Keep original bullet
-                    new_bullets.append(bullet)
+                # Debug: Check if we actually added missing keywords
+                old_text = " ".join(exp.bullets).lower()
+                new_text = " ".join(new_bullets).lower()
             
-            # Debug: Check if we actually added missing keywords
-            old_text = " ".join(exp.bullets).lower()
-            new_text = " ".join(new_bullets).lower()
-            
-            for kw in ats_feedback.missing_keywords[:3]:
-                if kw.lower() in new_text:
-                    print(f"DEBUG: SUCCESS: Added missing keyword '{kw}'")
-                else:
-                    print(f"DEBUG: MISSING: Keyword '{kw}' not found")
+                for kw in ats_feedback.missing_keywords[:3]:
+                    if kw.lower() in new_text:
+                        print(f"DEBUG: SUCCESS: Added missing keyword '{kw}'")
+                    else:
+                        print(f"DEBUG: MISSING: Keyword '{kw}' not found")
                     
-            exp.bullets = new_bullets
+                exp.bullets = new_bullets
         
-        # If we have extra improved bullets, add them to first experience
-        if bullet_idx < len(improved_bullets) and improved.experience:
-            remaining = improved_bullets[bullet_idx:]
-            improved.experience[0].bullets.extend(remaining[:2])  # Add up to 2 more
+            # If we have extra improved bullets, add them to first experience
+            if bullet_idx < len(improved_bullets) and improved.experience:
+                remaining = improved_bullets[bullet_idx:]
+                improved.experience[0].bullets.extend(remaining[:2])  # Add up to 2 more
         
-        return improved
+            return improved
