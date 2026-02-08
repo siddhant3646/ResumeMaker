@@ -504,57 +504,153 @@ Return valid JSON:
         ats_feedback: 'ATSScore'
     ) -> TailoredResume:
         """
-        Consolidate content by removing weak bullets to fit on fewer pages.
-        Called when a trailing page (page 2+) has <20% content.
+        Iteratively consolidate content by removing weak bullets ONE BY ONE.
+        Stops when estimated fill fits on a single page.
+        Then does a final polish pass to REPLACE (not add) any remaining weak bullets.
         """
         from copy import deepcopy
         consolidated = deepcopy(resume)
         
         # Get list of weak bullets from ATS feedback
-        weak_bullets = set(b.lower().strip() for b in ats_feedback.weak_bullets)
+        weak_bullets_set = set(b.lower().strip() for b in ats_feedback.weak_bullets)
         
-        # Calculate how many bullets to remove
-        # Each bullet is ~2.5 lines. To reduce a page, we need to remove ~10-15 bullets.
-        bullets_to_remove = 10
+        # Estimate current bullet count
+        total_bullets = sum(len(exp.bullets) for exp in consolidated.experience)
+        
+        # Target: ~12-15 bullets for a single page (FAANG standard)
+        # Each bullet is ~2.5 lines. 1 page ≈ 40 lines of content ≈ 16 bullets max
+        TARGET_BULLETS = 14
+        
+        print(f"DEBUG: Consolidation START - Total bullets: {total_bullets}, Target: {TARGET_BULLETS}")
+        
+        # PHASE 1: Iterative removal (one by one)
         removed_count = 0
         
-        print(f"DEBUG: Consolidation - targeting {bullets_to_remove} weak bullets for removal")
-        print(f"DEBUG: Weak bullets identified: {weak_bullets}")
-        
-        # Sort experiences oldest-first (we want to trim older roles more aggressively)
-        sorted_exp = sorted(consolidated.experience, key=lambda x: x.startDate if hasattr(x, 'startDate') else "", reverse=False)
-        
-        for exp in sorted_exp:
-            if removed_count >= bullets_to_remove:
-                break
+        while total_bullets > TARGET_BULLETS:
+            # Find the weakest bullet to remove
+            weakest_bullet = None
+            weakest_exp = None
+            weakest_score = float('inf')
             
-            # Filter out weak bullets from this experience
-            original_count = len(exp.bullets)
-            strong_bullets = []
+            # Sort experiences oldest-first (trim older roles first)
+            sorted_exp = sorted(consolidated.experience, key=lambda x: x.startDate if hasattr(x, 'startDate') else "", reverse=False)
             
+            for exp in sorted_exp:
+                for bullet in exp.bullets:
+                    score = self._score_bullet_strength(bullet, weak_bullets_set)
+                    if score < weakest_score:
+                        weakest_score = score
+                        weakest_bullet = bullet
+                        weakest_exp = exp
+            
+            # Remove the weakest bullet
+            if weakest_bullet and weakest_exp:
+                weakest_exp.bullets.remove(weakest_bullet)
+                removed_count += 1
+                total_bullets -= 1
+                print(f"DEBUG: Removed bullet (score {weakest_score}): {weakest_bullet[:40]}...")
+                print(f"DEBUG: Remaining bullets: {total_bullets}")
+            else:
+                break  # No more bullets to remove
+        
+        print(f"DEBUG: Phase 1 complete - Removed {removed_count} bullets, now at {total_bullets}")
+        
+        # PHASE 2: Final Polish - Replace weak bullets WITHOUT increasing count
+        # Find any remaining weak bullets and call AI to improve them
+        weak_remaining = []
+        for exp in consolidated.experience:
             for bullet in exp.bullets:
-                is_weak = False
-                normalized = bullet.lower().strip()
-                
-                # Check if this bullet matches any weak bullet signature
-                for weak in weak_bullets:
-                    if weak in normalized or normalized in weak:
-                        is_weak = True
-                        break
-                
-                # Also check for generic/short bullets as weak
-                if len(bullet) < 50 or not any(char.isdigit() for char in bullet):
-                    # Short bullets without numbers are likely weak
-                    is_weak = True
-                
-                if is_weak and removed_count < bullets_to_remove:
-                    removed_count += 1
-                    print(f"DEBUG: Removed weak bullet: {bullet[:50]}...")
-                else:
-                    strong_bullets.append(bullet)
-            
-            exp.bullets = strong_bullets
-            print(f"DEBUG: {exp.company}: {original_count} -> {len(exp.bullets)} bullets")
+                score = self._score_bullet_strength(bullet, weak_bullets_set)
+                if score < 50:  # Below threshold
+                    weak_remaining.append((exp, bullet))
         
-        print(f"DEBUG: Consolidation complete - removed {removed_count} bullets")
+        if weak_remaining:
+            print(f"DEBUG: Phase 2 - Polishing {len(weak_remaining)} weak bullets")
+            consolidated = self._polish_weak_bullets(consolidated, weak_remaining, ats_feedback)
+        
         return consolidated
+    
+    def _score_bullet_strength(self, bullet: str, weak_bullets_set: set) -> int:
+        """
+        Score a bullet from 0-100 based on strength.
+        Lower score = weaker = more likely to be removed.
+        """
+        score = 50  # Base score
+        normalized = bullet.lower().strip()
+        
+        # Penalty: matches known weak bullets
+        for weak in weak_bullets_set:
+            if weak in normalized or normalized in weak:
+                score -= 30
+                break
+        
+        # Penalty: too short
+        if len(bullet) < 50:
+            score -= 20
+        
+        # Penalty: no numbers (no quantification)
+        if not any(char.isdigit() for char in bullet):
+            score -= 15
+        
+        # Bonus: has strong action verbs
+        strong_verbs = ['architected', 'engineered', 'spearheaded', 'optimized', 'reduced', 'increased', 'led', 'designed', 'implemented']
+        if any(verb in normalized for verb in strong_verbs):
+            score += 10
+        
+        # Bonus: has percentage or dollar signs
+        if '%' in bullet or '$' in bullet:
+            score += 10
+        
+        return max(0, min(100, score))
+    
+    def _polish_weak_bullets(
+        self,
+        resume: TailoredResume,
+        weak_bullets: list,
+        ats_feedback: 'ATSScore'
+    ) -> TailoredResume:
+        """
+        Call AI to improve weak bullets WITHOUT adding new ones.
+        """
+        if not weak_bullets or not self.nvidia_api_key:
+            return resume
+        
+        # Build a prompt to improve specific bullets
+        weak_text = "\n".join([f"- {bullet}" for _, bullet in weak_bullets[:5]])
+        missing_kw = ", ".join(ats_feedback.missing_keywords[:8])
+        
+        prompt = f"""You are an expert resume writer. Improve these weak resume bullets to be FAANG-standard.
+
+WEAK BULLETS TO IMPROVE:
+{weak_text}
+
+REQUIRED KEYWORDS TO INTEGRATE:
+{missing_kw}
+
+RULES:
+1. Return EXACTLY the same number of bullets as input.
+2. Each improved bullet must use STAR format (Situation, Task, Action, Result).
+3. Each bullet must have at least ONE quantified metric (%, $, numbers).
+4. Integrate at least one required keyword per bullet.
+5. Keep bullets under 120 characters.
+
+OUTPUT FORMAT:
+Return ONLY a JSON array of improved bullets, nothing else:
+["Improved bullet 1", "Improved bullet 2", ...]
+"""
+        
+        try:
+            response = self._call_ai_model_for_improvement(prompt)
+            improved_bullets = response.get("bullets", [])
+            
+            if improved_bullets and len(improved_bullets) == len(weak_bullets):
+                # Replace weak bullets with improved versions
+                for i, (exp, old_bullet) in enumerate(weak_bullets):
+                    if i < len(improved_bullets):
+                        idx = exp.bullets.index(old_bullet)
+                        exp.bullets[idx] = improved_bullets[i]
+                        print(f"DEBUG: Polished bullet: {old_bullet[:30]}... -> {improved_bullets[i][:30]}...")
+        except Exception as e:
+            print(f"DEBUG: Polish failed: {e}")
+        
+        return resume
