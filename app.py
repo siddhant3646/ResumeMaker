@@ -274,45 +274,74 @@ def main():
     if 'job_analysis' not in st.session_state:
         st.session_state.job_analysis = None
     
-    # App Title
+    # Enhanced Hero Section with Animated Logo
     st.markdown("""
-    <div style="text-align: center; margin-bottom: 1.5rem;">
-        <h1 style="
-            font-size: 3rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin: 0;
-            padding: 0.5rem 0;
-        ">ATS Resume Maker</h1>
-        <p style="color: #94a3b8; font-size: 1.1rem; margin-top: 0.5rem;">
-            AI-Powered Resume Optimizer
+    <div style="text-align: center; margin-bottom: 1rem; padding-top: 1rem;">
+        <h1 class="hero-logo">ATS Resume Maker</h1>
+        <p class="hero-tagline">
+            ✨ AI-Powered Resume Optimization for FAANG/MAANG Companies
         </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Floating Stats
+    # Feature Pills
     st.markdown("""
-    <div style="display: flex; justify-content: center; gap: 1.5rem; margin-bottom: 2rem; flex-wrap: wrap;">
-        <div class="floating-stat magnetic-button" style="padding: 1rem 1.5rem; font-size: 1.1rem;">
-            <span style="font-size: 1.3rem;">⚡</span>
-            <span><span class="value">STAR</span> Format</span>
+    <div class="feature-pills">
+        <div class="feature-pill">
+            <span class="icon">⚡</span>
+            <span>STAR Format</span>
         </div>
-        <div class="floating-stat magnetic-button" style="padding: 1rem 1.5rem; font-size: 1.1rem;">
-            <span style="font-size: 1.3rem;">🎯</span>
-            <span><span class="value">ATS</span> Score >90</span>
+        <div class="feature-pill">
+            <span class="icon">🎯</span>
+            <span>ATS Score 95+</span>
         </div>
-        <div class="floating-stat magnetic-button" style="padding: 1rem 1.5rem; font-size: 1.1rem;">
-            <span style="font-size: 1.3rem;">✨</span>
-            <span><span class="value">AI</span> Enhanced</span>
+        <div class="feature-pill">
+            <span class="icon">🤖</span>
+            <span>Mistral AI</span>
+        </div>
+        <div class="feature-pill">
+            <span class="icon">📊</span>
+            <span>JD Matching</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
     # Get current step
     current_step = st.session_state.step
+    
+    # Step Progress Wizard
+    step_1_class = "completed" if current_step > 1 else ("active" if current_step == 1 else "inactive")
+    step_2_class = "completed" if current_step > 2 else ("active" if current_step == 2 else "inactive")
+    step_3_class = "active" if current_step == 3 else "inactive"
+    
+    conn_1_class = "completed" if current_step > 1 else ("active" if current_step >= 1 else "")
+    conn_2_class = "completed" if current_step > 2 else ("active" if current_step >= 2 else "")
+    
+    st.markdown(f"""
+    <div class="step-wizard">
+        <div class="step-item">
+            <div class="step-circle {step_1_class}">
+                {"✓" if current_step > 1 else "1"}
+            </div>
+            <span class="step-label">Upload</span>
+        </div>
+        <div class="step-connector {conn_1_class}"></div>
+        <div class="step-item">
+            <div class="step-circle {step_2_class}">
+                {"✓" if current_step > 2 else "2"}
+            </div>
+            <span class="step-label">Customize</span>
+        </div>
+        <div class="step-connector {conn_2_class}"></div>
+        <div class="step-item">
+            <div class="step-circle {step_3_class}">3</div>
+            <span class="step-label">Download</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Add spacing for step labels
+    st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
     
     # Render appropriate step
     if current_step == 1:
@@ -769,35 +798,114 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
 
 
 def render_step_3_download():
-    """Step 3: Download Results"""
-    st.header("✅ Your Resume is Ready!")
+    """Step 3: Download Results with celebration effects"""
     
     tailored = st.session_state.tailored_resume
     job_analysis = st.session_state.job_analysis
     
     if tailored and tailored.ats_score:
-        st.markdown("""
-        Your resume has been successfully tailored with FAANG/MAANG optimization standards.
-        All bullet points use STAR format with quantified metrics.
-        """)
+        score = tailored.ats_score.overall
         
-        # Show ATS score
-        st.markdown(
-            animation_manager.get_ats_score_card(
-                tailored.ats_score.overall,
-                {
-                    'star_compliance': tailored.ats_score.star_compliance,
-                    'quantification': tailored.ats_score.quantification,
-                    'keyword_match': tailored.ats_score.keyword_match,
-                    'action_verbs': tailored.ats_score.action_verb_strength
+        # Confetti celebration for high scores
+        if score >= 90:
+            st.markdown("""
+            <div class="confetti-container" id="confetti-container"></div>
+            <script>
+            function createConfetti() {
+                const container = document.getElementById('confetti-container');
+                if (!container) return;
+                const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#34d399'];
+                for (let i = 0; i < 50; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDelay = Math.random() * 2 + 's';
+                    confetti.style.width = (Math.random() * 10 + 5) + 'px';
+                    confetti.style.height = (Math.random() * 10 + 5) + 'px';
+                    confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+                    container.appendChild(confetti);
                 }
-            ),
-            unsafe_allow_html=True
-        )
+            }
+            createConfetti();
+            </script>
+            """, unsafe_allow_html=True)
+        
+        # Success card with animation
+        score_class = "excellent" if score >= 95 else ("good" if score >= 85 else "needs-work")
+        circumference = 2 * 3.14159 * 70  # radius = 70
+        offset = circumference - (score / 100) * circumference
+        
+        st.markdown(f"""
+        <div class="success-card">
+            <div class="success-icon">🎉</div>
+            <h2 style="color: white; margin-bottom: 0.5rem; font-size: 1.75rem;">Your Resume is Ready!</h2>
+            <p style="color: #9ca3af; margin-bottom: 1.5rem;">
+                Optimized for FAANG/MAANG ATS systems with STAR-format bullets
+            </p>
+            
+            <!-- Circular Gauge -->
+            <div class="ats-gauge">
+                <svg width="180" height="180" viewBox="0 0 180 180">
+                    <defs>
+                        <linearGradient id="gauge-gradient-excellent" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#10b981"/>
+                            <stop offset="100%" style="stop-color:#34d399"/>
+                        </linearGradient>
+                        <linearGradient id="gauge-gradient-good" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#3b82f6"/>
+                            <stop offset="100%" style="stop-color:#8b5cf6"/>
+                        </linearGradient>
+                        <linearGradient id="gauge-gradient-warning" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#f59e0b"/>
+                            <stop offset="100%" style="stop-color:#fbbf24"/>
+                        </linearGradient>
+                    </defs>
+                    <circle cx="90" cy="90" r="70" class="ats-gauge-bg"/>
+                    <circle cx="90" cy="90" r="70" class="ats-gauge-fill {score_class}" 
+                            stroke-dasharray="{circumference}" 
+                            stroke-dashoffset="{offset}"/>
+                </svg>
+                <div class="ats-gauge-value">
+                    <div class="ats-gauge-number">{score}</div>
+                    <div class="ats-gauge-label">ATS Score</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Score breakdown bars in columns
+        col1, col2 = st.columns(2)
+        
+        details = {
+            'Keywords': tailored.ats_score.keyword_match,
+            'STAR Format': tailored.ats_score.star_compliance,
+            'Quantification': tailored.ats_score.quantification,
+            'Action Verbs': tailored.ats_score.action_verb_strength
+        }
+        
+        for i, (label, value) in enumerate(details.items()):
+            bar_class = "excellent" if value >= 90 else ("good" if value >= 80 else "warning")
+            with (col1 if i < 2 else col2):
+                st.markdown(f"""
+                <div class="score-bar-container">
+                    <div class="score-bar-header">
+                        <span class="score-bar-label">{label}</span>
+                        <span class="score-bar-value">{value}%</span>
+                    </div>
+                    <div class="score-bar-track">
+                        <div class="score-bar-fill {bar_class}" style="width: {value}%;"></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
         
         # Show role analysis
         if job_analysis:
-            with st.expander("📊 Job Analysis"):
+            with st.expander("📊 Job Analysis", expanded=False):
                 st.write(f"**Detected Role:** {job_analysis.role_title}")
                 st.write(f"**Seniority Level:** {job_analysis.seniority_level.value.title()}")
                 st.write(f"**Industry:** {job_analysis.industry.value.title()}")
@@ -806,7 +914,7 @@ def render_step_3_download():
                     st.write(f"**Skills Enhanced:** {', '.join(job_analysis.missing_from_resume[:5])}")
         
         # Preview
-        with st.expander("👁️ Preview Tailored Resume"):
+        with st.expander("👁️ Preview Tailored Resume", expanded=False):
             st.subheader(tailored.basics.name)
             st.write(f"{tailored.basics.email} | {tailored.basics.phone or 'N/A'}")
             
@@ -826,7 +934,7 @@ def render_step_3_download():
         try:
             pdf_bytes = generate_pdf_to_bytes(tailored)
             
-            # Download buttons
+            # Download button with animation
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 st.download_button(
@@ -840,6 +948,7 @@ def render_step_3_download():
             st.error(f"Error generating PDF: {e}")
     
     # Start over
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Start Over", use_container_width=True):
         st.session_state.step = 1
         st.session_state.parsed_resume = None

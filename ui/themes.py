@@ -416,6 +416,424 @@ def get_modern_css() -> str:
         position: relative;
         z-index: 1;
     }}
+    
+    /* ===== ANIMATED HERO LOGO ===== */
+    .hero-logo {{
+        font-size: 4rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #667eea 75%, #764ba2 100%);
+        background-size: 300% 300%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: gradient-shift 4s ease infinite;
+        text-shadow: 0 0 60px rgba(102, 126, 234, 0.6);
+        letter-spacing: -2px;
+    }}
+    
+    @keyframes gradient-shift {{
+        0%, 100% {{ background-position: 0% 50%; }}
+        50% {{ background-position: 100% 50%; }}
+    }}
+    
+    .hero-tagline {{
+        font-size: 1.25rem;
+        color: {theme.text_gray_400};
+        margin-top: 0.75rem;
+        opacity: 0;
+        animation: fade-in-up 0.8s ease forwards 0.3s;
+    }}
+    
+    @keyframes fade-in-up {{
+        from {{
+            opacity: 0;
+            transform: translateY(20px);
+        }}
+        to {{
+            opacity: 1;
+            transform: translateY(0);
+        }}
+    }}
+    
+    /* ===== STEP PROGRESS WIZARD ===== */
+    .step-wizard {{
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0;
+        margin: 2rem 0;
+        padding: 0 2rem;
+    }}
+    
+    .step-item {{
+        display: flex;
+        align-items: center;
+        position: relative;
+    }}
+    
+    .step-circle {{
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        z-index: 2;
+    }}
+    
+    .step-circle.completed {{
+        background: {theme.gradient_success};
+        color: white;
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+    }}
+    
+    .step-circle.active {{
+        background: {theme.gradient_button};
+        color: white;
+        box-shadow: 0 0 25px rgba(59, 130, 246, 0.6);
+        animation: pulse-glow 2s ease-in-out infinite;
+    }}
+    
+    .step-circle.inactive {{
+        background: {theme.glass_bg};
+        border: 2px solid {theme.glass_border};
+        color: {theme.text_gray_500};
+    }}
+    
+    @keyframes pulse-glow {{
+        0%, 100% {{
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+            transform: scale(1);
+        }}
+        50% {{
+            box-shadow: 0 0 35px rgba(139, 92, 246, 0.6);
+            transform: scale(1.05);
+        }}
+    }}
+    
+    .step-connector {{
+        width: 80px;
+        height: 4px;
+        background: {theme.glass_border};
+        position: relative;
+        overflow: hidden;
+    }}
+    
+    .step-connector.completed {{
+        background: {theme.gradient_success};
+    }}
+    
+    .step-connector.active {{
+        background: linear-gradient(90deg, {theme.accent_emerald} 0%, {theme.accent_blue} 100%);
+    }}
+    
+    .step-label {{
+        position: absolute;
+        top: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 0.85rem;
+        white-space: nowrap;
+        color: {theme.text_gray_400};
+        font-weight: 500;
+    }}
+    
+    .step-circle.active + .step-label,
+    .step-circle.completed + .step-label {{
+        color: {theme.text_white};
+    }}
+    
+    /* ===== CIRCULAR ATS GAUGE ===== */
+    .ats-gauge {{
+        position: relative;
+        width: 180px;
+        height: 180px;
+        margin: 0 auto;
+    }}
+    
+    .ats-gauge svg {{
+        transform: rotate(-90deg);
+    }}
+    
+    .ats-gauge-bg {{
+        fill: none;
+        stroke: {theme.glass_border};
+        stroke-width: 12;
+    }}
+    
+    .ats-gauge-fill {{
+        fill: none;
+        stroke-width: 12;
+        stroke-linecap: round;
+        transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }}
+    
+    .ats-gauge-fill.excellent {{
+        stroke: url(#gauge-gradient-excellent);
+    }}
+    
+    .ats-gauge-fill.good {{
+        stroke: url(#gauge-gradient-good);
+    }}
+    
+    .ats-gauge-fill.needs-work {{
+        stroke: url(#gauge-gradient-warning);
+    }}
+    
+    .ats-gauge-value {{
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+    }}
+    
+    .ats-gauge-number {{
+        font-size: 3rem;
+        font-weight: 800;
+        background: {theme.gradient_text};
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        line-height: 1;
+    }}
+    
+    .ats-gauge-label {{
+        font-size: 0.9rem;
+        color: {theme.text_gray_400};
+        margin-top: 0.25rem;
+    }}
+    
+    /* ===== SCORE BREAKDOWN BARS ===== */
+    .score-bar-container {{
+        margin: 0.75rem 0;
+    }}
+    
+    .score-bar-header {{
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }}
+    
+    .score-bar-label {{
+        color: {theme.text_gray_300};
+        font-weight: 500;
+    }}
+    
+    .score-bar-value {{
+        color: {theme.text_white};
+        font-weight: 700;
+    }}
+    
+    .score-bar-track {{
+        height: 8px;
+        background: {theme.glass_bg};
+        border-radius: 4px;
+        overflow: hidden;
+    }}
+    
+    .score-bar-fill {{
+        height: 100%;
+        border-radius: 4px;
+        transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+        background: {theme.gradient_button};
+    }}
+    
+    .score-bar-fill.excellent {{
+        background: {theme.gradient_success};
+    }}
+    
+    .score-bar-fill.good {{
+        background: {theme.gradient_button};
+    }}
+    
+    .score-bar-fill.warning {{
+        background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+    }}
+    
+    /* ===== PULSING LOADING ANIMATION ===== */
+    .loading-pulse {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }}
+    
+    .loading-dot {{
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: {theme.accent_blue};
+        animation: loading-bounce 1.4s infinite ease-in-out both;
+    }}
+    
+    .loading-dot:nth-child(1) {{ animation-delay: -0.32s; background: {theme.accent_blue}; }}
+    .loading-dot:nth-child(2) {{ animation-delay: -0.16s; background: {theme.accent_purple}; }}
+    .loading-dot:nth-child(3) {{ animation-delay: 0s; background: {theme.accent_pink}; }}
+    
+    @keyframes loading-bounce {{
+        0%, 80%, 100% {{
+            transform: scale(0);
+        }}
+        40% {{
+            transform: scale(1);
+        }}
+    }}
+    
+    /* ===== SKELETON LOADING ===== */
+    .skeleton {{
+        background: linear-gradient(90deg, {theme.glass_bg} 25%, rgba(255,255,255,0.1) 50%, {theme.glass_bg} 75%);
+        background-size: 200% 100%;
+        animation: skeleton-shimmer 1.5s infinite;
+        border-radius: 8px;
+    }}
+    
+    @keyframes skeleton-shimmer {{
+        0% {{ background-position: 200% 0; }}
+        100% {{ background-position: -200% 0; }}
+    }}
+    
+    /* ===== CONFETTI CELEBRATION ===== */
+    .confetti-container {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 9999;
+        overflow: hidden;
+    }}
+    
+    .confetti {{
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        animation: confetti-fall 3s linear forwards;
+    }}
+    
+    @keyframes confetti-fall {{
+        0% {{
+            opacity: 1;
+            transform: translateY(-10vh) rotate(0deg);
+        }}
+        100% {{
+            opacity: 0;
+            transform: translateY(100vh) rotate(720deg);
+        }}
+    }}
+    
+    /* ===== SUCCESS CARD ===== */
+    .success-card {{
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(52, 211, 153, 0.1) 100%);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: center;
+        animation: success-pop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }}
+    
+    @keyframes success-pop {{
+        0% {{
+            transform: scale(0.8);
+            opacity: 0;
+        }}
+        100% {{
+            transform: scale(1);
+            opacity: 1;
+        }}
+    }}
+    
+    .success-icon {{
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        animation: bounce-in 0.6s ease-out 0.2s backwards;
+    }}
+    
+    @keyframes bounce-in {{
+        0% {{
+            transform: scale(0);
+        }}
+        50% {{
+            transform: scale(1.2);
+        }}
+        100% {{
+            transform: scale(1);
+        }}
+    }}
+    
+    /* ===== FEATURE PILLS ===== */
+    .feature-pills {{
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin: 1.5rem 0;
+    }}
+    
+    .feature-pill {{
+        background: {theme.glass_bg};
+        border: 1px solid {theme.glass_border};
+        border-radius: 50px;
+        padding: 0.5rem 1.25rem;
+        font-size: 0.9rem;
+        color: {theme.text_gray_300};
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }}
+    
+    .feature-pill:hover {{
+        border-color: {theme.accent_blue};
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    }}
+    
+    .feature-pill .icon {{
+        font-size: 1.1rem;
+    }}
+    
+    /* ===== ANIMATED DOWNLOAD BUTTON ===== */
+    .download-btn {{
+        background: {theme.gradient_success};
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 1rem 2.5rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }}
+    
+    .download-btn::before {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        transition: left 0.5s ease;
+    }}
+    
+    .download-btn:hover::before {{
+        left: 100%;
+    }}
+    
+    .download-btn:hover {{
+        transform: translateY(-3px);
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+    }}
     </style>
     """
 
