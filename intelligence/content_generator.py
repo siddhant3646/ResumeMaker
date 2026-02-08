@@ -316,11 +316,18 @@ class ContentGenerator:
                     if parent in all_skills_normalized:
                         return True
             
-            # Check for "(one of these)" type patterns
-            if 'one of' in norm or '/' in norm:
+            # Check for "(one of these)" type patterns only
+            if 'one of' in norm:
                 return True
                 
             return False
+        
+        def transform_skill(skill: str) -> str:
+            """Transform skill: replace / with , for readability"""
+            # Replace "/" with ", " for skills like "AWS/GCP/Azure"
+            if '/' in skill:
+                return skill.replace('/', ', ')
+            return skill
         
         # Combine all skills for analysis
         all_skills = skills.languages_frameworks + skills.tools
@@ -345,6 +352,10 @@ class ContentGenerator:
         # Step 2: Remove filler and redundant skills
         cleaned_langs = [s for s in deduped_langs if not should_remove(s, all_normalized)]
         cleaned_tools = [s for s in deduped_tools if not should_remove(s, all_normalized)]
+        
+        # Step 2.5: Transform skills (replace / with ,)
+        cleaned_langs = [transform_skill(s) for s in cleaned_langs]
+        cleaned_tools = [transform_skill(s) for s in cleaned_tools]
         
         # Step 3: Add missing JD keywords (only non-filler ones)
         existing = set(normalize(s) for s in cleaned_langs + cleaned_tools)
