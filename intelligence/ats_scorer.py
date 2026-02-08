@@ -17,8 +17,8 @@ class ATSScorer:
     
     def __init__(self, api_key: str):
         """Initialize scorer with Mistral AI client"""
-        # Using the provided NVIDIA API key
-        self.api_key = "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"
+        # Using the provided API key
+        self.api_key = api_key
         self.client = MistralAIClient(self.api_key)
         self.page_strategy = getattr(self, 'page_strategy', 'optimize')
         self.target_pages = getattr(self, 'target_pages', '1')

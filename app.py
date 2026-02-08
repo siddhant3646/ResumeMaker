@@ -179,8 +179,7 @@ def get_api_keys() -> Dict[str, str]:
         if encryption_password and nvidia_encrypted:
             nvidia_key = decrypt_api_key_from_secrets(nvidia_encrypted, encryption_password)
         else:
-            # Hardcoded fallback for NVIDIA/Mistral
-            nvidia_key = "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"
+            nvidia_key = ""
         
         return {
             "nvidia": nvidia_key,
@@ -873,8 +872,8 @@ def parse_resume_with_mistral(resume_text: str, api_key: str) -> 'ParsedResume':
     from core.models import Basics, Education, Experience, Skills, Project, ParsedResume
     from intelligence.ai_client import MistralAIClient
     
-    # Using the provided NVIDIA API key
-    mistral_api_key = "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"
+    # Using the provided API key
+    mistral_api_key = api_key
     client = MistralAIClient(mistral_api_key)
     
     # Generate prompt
