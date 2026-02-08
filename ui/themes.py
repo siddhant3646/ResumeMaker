@@ -419,7 +419,7 @@ def get_modern_css() -> str:
     
     /* ===== ANIMATED HERO LOGO ===== */
     .hero-logo {{
-        font-size: 4rem;
+        font-size: 11rem;
         font-weight: 900;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #667eea 75%, #764ba2 100%);
         background-size: 300% 300%;
