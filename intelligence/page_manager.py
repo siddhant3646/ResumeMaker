@@ -294,14 +294,35 @@ class PageManager:
                             issues=[f"Page {i+1}: No text detected"]
                         )
                     
-                    # Calculate text coverage
-                    page_area = page.width * page.height
-                    # Estimate text area based on character count
-                    text_chars = len(text.replace('\n', '').replace(' ', ''))
-                    estimated_text_area = text_chars * 100
+                    # IMPROVED: Calculate fill using actual text bounding boxes
+                    page_height = page.height
+                    page_width = page.width
                     
-                    fill_ratio = estimated_text_area / page_area
-                    fill_percentage = int(fill_ratio * 100)
+                    # Get all text characters with their positions
+                    chars = page.chars
+                    if chars:
+                        # Find the vertical extent of content (top of first char to bottom of last char)
+                        # In PDF coordinates, y increases downward from top
+                        y_positions = [c['top'] for c in chars] + [c['bottom'] for c in chars]
+                        min_y = min(y_positions)  # Top of content
+                        max_y = max(y_positions)  # Bottom of content
+                        
+                        # Calculate content height as percentage of available page height
+                        # Assume ~0.5 inch (36pt) margins top/bottom = 72pt total
+                        usable_height = page_height - 72  # Subtract margins
+                        content_height = max_y - min_y
+                        
+                        fill_percentage = int((content_height / usable_height) * 100)
+                        fill_percentage = min(100, max(0, fill_percentage))  # Clamp 0-100
+                    else:
+                        # Fallback to line count estimation
+                        line_count = text.count('\n') + 1
+                        # Typical resume line is ~12pt, usable height is ~730pt (A4 minus margins)
+                        estimated_fill = (line_count * 14) / 730  # 14pt per line with spacing
+                        fill_percentage = int(estimated_fill * 100)
+                        fill_percentage = min(100, max(0, fill_percentage))
+                    
+                    print(f"DEBUG: Page {i+1} fill calculation - {fill_percentage}% (chars: {len(chars) if chars else 0})")
                     
                     if fill_percentage < target_fill:
                         # Only flag underfill if it's the target page or if we are well below target
