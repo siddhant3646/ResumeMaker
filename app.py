@@ -572,7 +572,7 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 else:
                     info_placeholder.info(f"🔄 Attempt {attempt}/{MAX_ATTEMPTS} - Optimizing to reach target ATS score of {config.target_ats_score}...")
             
-            progress_bar.progress(0.15 + (attempt - 1) * 0.17)
+            progress_bar.progress(min(0.95, 0.15 + (attempt - 1) * 0.08))
             
             # Generate or regenerate tailored resume
             if attempt == 1:
