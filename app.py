@@ -589,6 +589,25 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                     # Get page feedback from previous iteration
                     page_feedback = getattr(st.session_state, 'last_page_status', None)
                     
+                    # Detect stale score (no improvement for 2+ attempts)
+                    prev_score = st.session_state.get('prev_attempt_score', 0)
+                    stale_count = st.session_state.get('stale_score_count', 0)
+                    current_best = best_tailored.ats_score.overall if best_tailored and best_tailored.ats_score else 0
+                    
+                    if current_best == prev_score:
+                        stale_count += 1
+                    else:
+                        stale_count = 0
+                    
+                    st.session_state.prev_attempt_score = current_best
+                    st.session_state.stale_score_count = stale_count
+                    
+                    # Force variation if score is stale for 2+ attempts
+                    force_variation = stale_count >= 2
+                    if force_variation:
+                        print(f"DEBUG: STALE SCORE DETECTED ({stale_count} attempts) - forcing variation")
+                        info_placeholder.warning(f"⚡ Score stuck at {current_best}. Trying aggressive variation...")
+                    
                     tailored = content_gen.regenerate_with_feedback(
                         previous_resume=best_tailored,
                         original_resume=resume,
@@ -596,7 +615,8 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                         ats_feedback=previous_ats_feedback,
                         config=config,
                         retry_count=attempt,
-                        page_feedback=page_feedback
+                        page_feedback=page_feedback,
+                        force_variation=force_variation
                     )
                 else:
                     # Fallback: continue with previous best

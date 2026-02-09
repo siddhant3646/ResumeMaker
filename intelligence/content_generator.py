@@ -448,12 +448,13 @@ class ContentGenerator:
         ats_feedback: 'ATSScore',
         config: GenerationConfig,
         retry_count: int = 1,
-        page_feedback=None
+        page_feedback=None,
+        force_variation: bool = False
     ) -> TailoredResume:
         """
         Regenerate resume using Mistral's ATS feedback to fix shortcomings.
         """
-        print(f"DEBUG: regenerate_with_feedback ENTERED - retry {retry_count}")
+        print(f"DEBUG: regenerate_with_feedback ENTERED - retry {retry_count}, force_variation={force_variation}")
         
         # Add page fill feedback if provided
         if page_feedback and page_feedback.needs_content:
@@ -498,6 +499,20 @@ class ContentGenerator:
                 else:
                     bullets_needed = 8
         
+        # VARIATION: Add creative variation instructions when score is stale
+        variation_instructions = ""
+        if force_variation:
+            import random
+            variation_styles = [
+                "Use completely different action verbs than before (try: orchestrated, spearheaded, pioneered, revolutionized, transformed, accelerated).",
+                "Focus on DIFFERENT metrics than previous attempts (try: cost savings $, time reduction %, user growth #, revenue impact $).",
+                "Emphasize a DIFFERENT aspect: leadership/mentoring in some bullets, technical depth in others.",
+                "Use higher impact numbers than before (aim for 50%+, $1M+, 10x improvements).",
+                "Reframe achievements from a business impact perspective rather than technical tasks.",
+            ]
+            selected_variations = random.sample(variation_styles, min(3, len(variation_styles)))
+            variation_instructions = "\n\nCRITICAL VARIATION REQUIRED (previous attempts produced same results):\n" + "\n".join(f"- {v}" for v in selected_variations)
+        
         improvement_prompt = f"""You are an expert resume writer. The previous attempt scored {ats_feedback.overall}/100 and is {page_feedback.fill_percentage if page_feedback else 0}% filled.
 
 To pass FAANG standards, the resume needs an ATS score >90 and should be >95% filled on each page.
@@ -523,6 +538,7 @@ INSTRUCTIONS:
 3. Use the STAR (Situation, Task, Action, Result) format with quantifiable metrics ($, %, #).
 4. Ensure the bullets match the seniority level ({job_analysis.seniority_level.value}).
 5. Look at the CURRENT RESUME CONTENT and ensure the new bullets are additive or significantly better than existing ones.
+{variation_instructions}
 
 Return valid JSON:
 {{
