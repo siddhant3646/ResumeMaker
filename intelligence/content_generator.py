@@ -256,7 +256,7 @@ class ContentGenerator:
             'modular and loosely coupled code', 'loosely coupled', 'loosely coupled systems',
             'code quality practices', 'code quality',
             'maintainability best practices', 'best practices',
-            'security fundamentals', 'security best practices',
+            'security fundamentals', 'security best practices', 'security',
             'performance optimization', 'optimization',
             # Basic web (assumed for any dev)
             'html', 'css', 'html5', 'css3',
@@ -275,7 +275,7 @@ class ContentGenerator:
             'problem solving', 'analytical skills',
             'team player', 'communication',
             # Architecture buzzwords without specifics
-            'design patterns',  # Better shown in context
+            'design patterns', 'system design patterns', 'solid',
             'modular coding',
             'distributed systems',  # Too vague
             'scalable systems',  # Too vague
@@ -283,6 +283,18 @@ class ContentGenerator:
             'reliability engineering',
             # Version control (assumed)
             'git', 'github', 'gitlab', 'version control',
+            # Java/Spring buzzwords (too vague - keep specific ones)
+            'j2ee', 'ioc', 'aop', 'mvc', 'spring (mvc, ioc, aop, security)',
+            'spring mvc', 'spring aop', 'spring ioc',
+            # Web services buzzwords
+            'web-services', 'web-services (json, soap)', 'json, soap',
+            'soap', 'xml',  # Legacy protocols
+            # IDE/Tools (not skills)
+            'eclipse', 'intellij', 'myeclipse', 'eclipse/myeclipse ide',
+            # Database generic
+            'rdbms', 'rdbms (oracle, postgres)', 'sql',
+            # Build tools (keep if specific, remove generic)
+            'maven/ant/gradle', 'ant',
         }
         
         # REDUNDANCY MAP - if key exists, remove values
@@ -439,6 +451,54 @@ class ContentGenerator:
             'projects': len(result.projects),
             'ats_score': result.ats_score.overall if result.ats_score else 0
         }
+    
+    def _clean_skills_section(self, skills: 'Skills') -> 'Skills':
+        """
+        Clean skills section: remove duplicates and filler.
+        Lightweight cleanup for use during regeneration.
+        """
+        # FILLER BLOCKLIST (must match _enhance_skills)
+        filler_skills = {
+            'agile methodologies', 'agile', 'scrum', 'kanban',
+            'solid', 'design patterns', 'system design patterns',
+            'git', 'github', 'gitlab', 'version control',
+            'j2ee', 'ioc', 'aop', 'mvc', 'spring (mvc, ioc, aop, security)',
+            'spring mvc', 'spring aop', 'spring ioc',
+            'web-services', 'web-services (json, soap)', 'json, soap', 'soap', 'xml',
+            'eclipse', 'intellij', 'myeclipse', 'eclipse/myeclipse ide',
+            'rdbms', 'rdbms (oracle, postgres)', 'sql',
+            'maven/ant/gradle', 'ant',
+            'security', 'security fundamentals', 'security best practices',
+            'html', 'css', 'html5', 'css3',
+            'oop', 'oops', 'oop concepts', 'object-oriented',
+            'data structures', 'algorithms', 'dsa',
+        }
+        
+        def normalize(s: str) -> str:
+            return s.lower().strip()
+        
+        # Deduplicate and remove filler from languages_frameworks
+        seen = set()
+        cleaned_langs = []
+        for s in skills.languages_frameworks:
+            norm = normalize(s)
+            if norm not in seen and norm not in filler_skills:
+                seen.add(norm)
+                cleaned_langs.append(s)
+        
+        # Deduplicate and remove filler from tools
+        cleaned_tools = []
+        for s in skills.tools:
+            norm = normalize(s)
+            if norm not in seen and norm not in filler_skills:
+                seen.add(norm)
+                cleaned_tools.append(s)
+        
+        skills.languages_frameworks = cleaned_langs
+        skills.tools = cleaned_tools
+        
+        print(f"DEBUG: Skills cleanup - {len(cleaned_langs)} langs, {len(cleaned_tools)} tools")
+        return skills
     
     def regenerate_with_feedback(
         self,
@@ -663,6 +723,10 @@ Return valid JSON:
                         improved.skills.languages_frameworks.append(kw)
                     else:
                         improved.skills.tools.append(kw)
+        
+        # Clean up skills section (remove duplicates and filler)
+        if improved.skills:
+            improved.skills = self._clean_skills_section(improved.skills)
         
         # Apply specifically mapped replacements first
         for exp in improved.experience:
