@@ -297,7 +297,7 @@ def main():
         </div>
         <div class="feature-pill">
             <span class="icon">🤖</span>
-            <span>Mistral AI</span>
+            <span>AI Powered</span>
         </div>
         <div class="feature-pill">
             <span class="icon">📊</span>
