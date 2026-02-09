@@ -390,6 +390,13 @@ def render_step_1_upload():
         label_visibility="collapsed"
     )
     
+    # Privacy notice
+    st.markdown("""
+    <p style="text-align: center; color: #6b7280; font-size: 0.75rem; margin-top: 0.5rem;">
+        🔒 Your resume is processed locally and never stored on our servers.
+    </p>
+    """, unsafe_allow_html=True)
+    
     st.markdown('</div>', unsafe_allow_html=True)  # Close bento-grid
     
     if uploaded_file is not None:
