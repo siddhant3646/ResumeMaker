@@ -550,7 +550,7 @@ Return valid JSON:
         try:
             improved_bullets = self._call_ai_model_for_improvement(improvement_prompt)
             improved_resume = self._apply_improvements(
-                previous_resume, improved_bullets, job_analysis, ats_feedback
+                previous_resume, improved_bullets, job_analysis, ats_feedback, page_feedback
             )
             
             if self.use_hybrid_scoring and hasattr(self, 'hybrid_scorer'):
@@ -641,8 +641,13 @@ Return valid JSON:
         resume: TailoredResume,
         improvements: Dict,
         job_analysis: JobAnalysis,
-        ats_feedback: 'ATSScore'
+        ats_feedback: 'ATSScore',
+        page_feedback=None
     ) -> TailoredResume:
+        """
+        Apply AI-generated improvements to a resume.
+        Dynamically adjusts bullet caps based on page fill percentage.
+        """
         from copy import deepcopy
         improved = deepcopy(resume)
         
@@ -687,16 +692,26 @@ Return valid JSON:
 
         # Distribute remaining NEW bullets across roles to fill page
         if new_bullets and sorted_exp:
-            # Determine dynamic caps based on current page count
-            # If we are on page 1 of 1, we should be generous to fill it.
-            # If we are on page 3+, we should be strict to reduce length.
-            current_pages = len(resume.pages) if hasattr(resume, 'pages') else 1
+            # DYNAMIC CAPS based on page fill - if underfilled, be more generous
+            page_fill = page_feedback.fill_percentage if page_feedback else 100
             
-            if current_pages == 1:
-                max_recent = 15  # Allow deep depth for single page
+            if page_fill < 70:
+                # Severely underfilled - allow MANY more bullets
+                max_recent = 20
+                max_older = 12
+                print(f"DEBUG: Page {page_fill}% underfilled - raising caps to {max_recent}/{max_older}")
+            elif page_fill < 85:
+                # Moderately underfilled - raise caps
+                max_recent = 18
+                max_older = 10
+                print(f"DEBUG: Page {page_fill}% underfilled - raising caps to {max_recent}/{max_older}")
+            elif page_fill < 95:
+                # Slightly underfilled - standard caps
+                max_recent = 15
                 max_older = 8
             else:
-                max_recent = 10 # Standard cap for multi-page
+                # Good fill - strict caps
+                max_recent = 12
                 max_older = 6
                 
             for i, bullet in enumerate(new_bullets):
