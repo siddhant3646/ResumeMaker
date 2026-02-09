@@ -151,9 +151,9 @@ class PageManager:
             if remaining_bullets <= 0:
                 break
             
-            # Allow up to 10 bullets for most recent role (FAANG standard)
-            # and up to 6 for older roles, provided there is space.
-            limit = 10 if idx == 0 else 6
+            # GENEROUS LIMITS: allow more bullets per role for better page fill
+            # Most recent role can have up to 15 bullets, older roles up to 10
+            limit = 15 if idx == 0 else 10
             bullet_count = min(limit, remaining_bullets)
             distribution[exp.company] = bullet_count
             remaining_bullets -= bullet_count

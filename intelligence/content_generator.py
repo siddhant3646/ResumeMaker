@@ -100,8 +100,8 @@ class ContentGenerator:
         # Process each experience entry
         for idx, exp in enumerate(resume.experience):
             is_most_recent = (idx == 0)
-            # STRICT LIMITS: max 8 bullets for most recent, max 5 for others
-            target_bullets = min(8 if is_most_recent else 5, page_plan.bullets_per_experience.get(exp.company, 8 if is_most_recent else 4))
+            # FLEXIBLE LIMITS: allow more bullets for initial generation, regeneration adds more if needed
+            target_bullets = min(12 if is_most_recent else 8, page_plan.bullets_per_experience.get(exp.company, 10 if is_most_recent else 6))
             
             # Enhance existing bullets
             enhanced_bullets = self._enhance_bullets(

@@ -496,7 +496,7 @@ class ExperienceFabricator:
         """Generate additional bullets for existing experience to cover missing skills"""
         new_bullets = []
         
-        for skill in missing_skills[:3]:  # Limit to top 3 missing skills
+        for skill in missing_skills[:5]:  # Cover top 5 missing skills for better page fill
             bullet = self.bullet_generator.generate_optimized_bullet(
                 skill=skill,
                 jd_keywords=[skill],
