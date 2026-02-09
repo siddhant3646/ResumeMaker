@@ -452,11 +452,17 @@ class ContentGenerator:
             'ats_score': result.ats_score.overall if result.ats_score else 0
         }
     
-    def _clean_skills_section(self, skills: 'Skills') -> 'Skills':
+    def _clean_skills_section(self, skills: 'Skills', preserve_keywords: set = None) -> 'Skills':
         """
         Clean skills section: remove duplicates and filler.
         Lightweight cleanup for use during regeneration.
+        
+        Args:
+            skills: Skills object to clean
+            preserve_keywords: Set of lowercase keywords to NEVER remove (JD-required)
         """
+        preserve_keywords = preserve_keywords or set()
+        
         # FILLER BLOCKLIST (must match _enhance_skills)
         filler_skills = {
             'agile methodologies', 'agile', 'scrum', 'kanban',
@@ -477,12 +483,18 @@ class ContentGenerator:
         def normalize(s: str) -> str:
             return s.lower().strip()
         
+        def is_filler(norm: str) -> bool:
+            """Check if skill is filler, but preserve JD keywords"""
+            if norm in preserve_keywords:
+                return False  # Never filter JD-required keywords
+            return norm in filler_skills
+        
         # Deduplicate and remove filler from languages_frameworks
         seen = set()
         cleaned_langs = []
         for s in skills.languages_frameworks:
             norm = normalize(s)
-            if norm not in seen and norm not in filler_skills:
+            if norm not in seen and not is_filler(norm):
                 seen.add(norm)
                 cleaned_langs.append(s)
         
@@ -490,14 +502,14 @@ class ContentGenerator:
         cleaned_tools = []
         for s in skills.tools:
             norm = normalize(s)
-            if norm not in seen and norm not in filler_skills:
+            if norm not in seen and not is_filler(norm):
                 seen.add(norm)
                 cleaned_tools.append(s)
         
         skills.languages_frameworks = cleaned_langs
         skills.tools = cleaned_tools
         
-        print(f"DEBUG: Skills cleanup - {len(cleaned_langs)} langs, {len(cleaned_tools)} tools")
+        print(f"DEBUG: Skills cleanup - {len(cleaned_langs)} langs, {len(cleaned_tools)} tools, preserved {len(preserve_keywords)} JD keywords")
         return skills
     
     def regenerate_with_feedback(
@@ -573,9 +585,10 @@ class ContentGenerator:
             selected_variations = random.sample(variation_styles, min(3, len(variation_styles)))
             variation_instructions = "\n\nCRITICAL VARIATION REQUIRED (previous attempts produced same results):\n" + "\n".join(f"- {v}" for v in selected_variations)
         
-        improvement_prompt = f"""You are an expert resume writer. The previous attempt scored {ats_feedback.overall}/100 and is {page_feedback.fill_percentage if page_feedback else 0}% filled.
+        improvement_prompt = f"""You are an expert resume writer. The previous attempt scored {ats_feedback.overall}/100 with ONLY {ats_feedback.keyword_match}% keyword match.
 
-To pass FAANG standards, the resume needs an ATS score >90 and should be >95% filled on each page.
+CRITICAL: KEYWORD DENSITY IS THE #1 PRIORITY. The resume MUST include these MISSING KEYWORDS:
+{missing_kw}
 
 JOB: {job_analysis.role_title}
 SENIORITY: {job_analysis.seniority_level.value}
@@ -586,19 +599,22 @@ CURRENT RESUME CONTENT:
 SHORTCOMINGS:
 {shortcomings}
 
-REQUIRED KEYWORDS (INTEGRATE ALL OF THESE):
-{missing_kw}
-
 WEAK BULLETS TO FIX:
 {weak_bullets_text}
 
 INSTRUCTIONS:
 1. Generate exactly {bullets_needed} NEW, high-impact achievement bullets.
-2. INTEGRATE ALL REQUIRED KEYWORDS into these new bullets naturally.
-3. Use the STAR (Situation, Task, Action, Result) format with quantifiable metrics ($, %, #).
-4. Ensure the bullets match the seniority level ({job_analysis.seniority_level.value}).
-5. Look at the CURRENT RESUME CONTENT and ensure the new bullets are additive or significantly better than existing ones.
+2. **KEYWORD INTEGRATION IS MANDATORY**: Each bullet MUST contain 2-3 keywords from the MISSING KEYWORDS list above.
+3. Distribute ALL missing keywords across your bullets. Do NOT leave any keyword unused.
+4. Use the STAR (Situation, Task, Action, Result) format with quantifiable metrics ($, %, #).
+5. Ensure the bullets match the seniority level ({job_analysis.seniority_level.value}).
+6. Keywords can be used naturally - e.g., "Spring Boot microservices" counts for both "Spring Boot" and "Microservices".
 {variation_instructions}
+
+EXAMPLE OF GOOD KEYWORD INTEGRATION:
+- Missing keywords: ["Spring Boot", "Microservices", "AWS", "CI/CD"]
+- Good bullet: "Architected Spring Boot microservices deployed on AWS with CI/CD pipelines, reducing deployment time by 70%."
+- This single bullet naturally integrates ALL 4 missing keywords.
 
 Return valid JSON:
 {{
@@ -724,9 +740,10 @@ Return valid JSON:
                     else:
                         improved.skills.tools.append(kw)
         
-        # Clean up skills section (remove duplicates and filler)
+        # Clean up skills section (remove duplicates and filler, but PRESERVE JD keywords)
+        jd_keywords = set(kw.lower() for kw in (ats_feedback.missing_keywords or []))
         if improved.skills:
-            improved.skills = self._clean_skills_section(improved.skills)
+            improved.skills = self._clean_skills_section(improved.skills, preserve_keywords=jd_keywords)
         
         # Apply specifically mapped replacements first
         for exp in improved.experience:
