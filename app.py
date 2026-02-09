@@ -860,16 +860,15 @@ def render_step_3_download():
         score_class = "excellent" if score >= 95 else ("good" if score >= 85 else "needs-work")
         circumference = 2 * 3.14159 * 70  # radius = 70
         offset = circumference - (score / 100) * circumference
-        
-        st.markdown(f"""
+        # Use textwrap.dedent to prevent code block rendering
+        from textwrap import dedent
+        gauge_html = dedent(f"""
         <div class="success-card">
             <div class="success-icon">🎉</div>
             <h2 style="color: white; margin-bottom: 0.5rem; font-size: 1.75rem;">Your Resume is Ready!</h2>
             <p style="color: #9ca3af; margin-bottom: 1.5rem;">
                 Optimized for FAANG/MAANG ATS systems with STAR-format bullets
             </p>
-            
-            <!-- Circular Gauge -->
             <div class="ats-gauge">
                 <svg width="180" height="180" viewBox="0 0 180 180">
                     <defs>
@@ -897,7 +896,8 @@ def render_step_3_download():
                 </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """).strip()
+        st.markdown(gauge_html, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
         
