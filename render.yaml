@@ -1,0 +1,66 @@
+# Render deployment configuration
+# See: https://render.com/docs/yaml-spec
+
+services:
+  - type: web
+    name: ats-resume-maker
+    runtime: docker
+    repo: https://github.com/siddhant3646/ResumeMaker
+    branch: feature/v2-resume-maker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: STREAMLIT_SERVER_PORT
+        value: 8501
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: true
+      - key: STREAMLIT_SERVER_ENABLE_CORS
+        value: false
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: false
+      # Auth0 Configuration (set in Render dashboard)
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_CLIENT_ID
+        sync: false
+      - key: AUTH0_CLIENT_SECRET
+        sync: false
+      - key: AUTH0_REDIRECT_URI
+        value: https://ats-resume-maker.onrender.com
+      # API Keys (set in Render dashboard)
+      - key: NVIDIA_API_KEY
+        sync: false
+      # Redis Configuration (optional, for scaling)
+      - key: REDIS_URL
+        sync: false
+        value: redis://default:password@your-redis-host:6379
+      # Optional: Upstash Redis for free tier
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+    healthCheckPath: /_stcore/health
+    buildCommand: echo "Build handled by Dockerfile"
+    startCommand: echo "Start handled by Dockerfile"
+    numInstances: 1
+    plan: free
+
+# Optional: Background worker for job processing (requires paid plan for multiple instances)
+# - type: worker
+#   name: resume-worker
+#   runtime: docker
+#   dockerfilePath: ./Dockerfile.worker
+#   envVars:
+#     - key: REDIS_URL
+#       fromService:
+#         type: redis
+#         name: resume-redis
+#         property: connectionString
+
+# Optional: Redis for caching and queue (can use Upstash free tier instead)
+# - type: redis
+#   name: resume-redis
+#   plan: starter
+#   ipAllowList: []  # allow all
