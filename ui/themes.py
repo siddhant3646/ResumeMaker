@@ -834,6 +834,197 @@ def get_modern_css() -> str:
         transform: translateY(-3px);
         box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
     }}
+    
+    /* ===== MOBILE RESPONSIVE STYLES ===== */
+    
+    /* Tablet and smaller (max-width: 1024px) */
+    @media screen and (max-width: 1024px) {{
+        .bento-grid {{
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            padding: 1rem;
+        }}
+        
+        .hero-logo {{
+            font-size: 6rem !important;
+        }}
+        
+        .step-wizard {{
+            padding: 0 1rem;
+        }}
+        
+        .step-connector {{
+            width: 40px;
+        }}
+    }}
+    
+    /* Mobile devices (max-width: 768px) */
+    @media screen and (max-width: 768px) {{
+        /* Hero section */
+        .hero-logo {{
+            font-size: 3.5rem !important;
+            letter-spacing: -1px;
+        }}
+        
+        .hero-tagline {{
+            font-size: 1rem !important;
+        }}
+        
+        /* Bento grid single column */
+        .bento-grid {{
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+            padding: 0.75rem;
+        }}
+        
+        .bento-item {{
+            padding: 1rem;
+        }}
+        
+        /* Step wizard vertical on mobile */
+        .step-wizard {{
+            flex-direction: column;
+            gap: 1rem;
+        }}
+        
+        .step-connector {{
+            width: 4px;
+            height: 30px;
+        }}
+        
+        .step-item {{
+            flex-direction: row;
+            width: 100%;
+            justify-content: flex-start;
+            gap: 1rem;
+        }}
+        
+        .step-label {{
+            position: static;
+            transform: none;
+            text-align: left;
+        }}
+        
+        /* Smaller gauges */
+        .ats-gauge {{
+            width: 120px;
+            height: 120px;
+        }}
+        
+        .ats-gauge-number {{
+            font-size: 2rem;
+        }}
+        
+        /* Feature pills wrap */
+        .feature-pills {{
+            gap: 0.5rem;
+        }}
+        
+        .feature-pill {{
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+        }}
+        
+        /* Touch-friendly buttons */
+        .stButton > button {{
+            min-height: 44px;
+            font-size: 0.9rem;
+        }}
+        
+        /* Glass cards */
+        .glass-card {{
+            border-radius: 12px;
+        }}
+        
+        /* Adjust main container padding */
+        .main .block-container {{
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }}
+    }}
+    
+    /* Small mobile devices (max-width: 480px) */
+    @media screen and (max-width: 480px) {{
+        .hero-logo {{
+            font-size: 2.5rem !important;
+        }}
+        
+        .hero-tagline {{
+            font-size: 0.9rem !important;
+        }}
+        
+        .step-circle {{
+            width: 36px;
+            height: 36px;
+            font-size: 0.9rem;
+        }}
+        
+        .step-label {{
+            font-size: 0.75rem;
+        }}
+        
+        .bento-item {{
+            padding: 0.75rem;
+        }}
+        
+        .feature-pill {{
+            font-size: 0.75rem;
+            padding: 0.3rem 0.6rem;
+        }}
+        
+        /* Smaller ATS gauge */
+        .ats-gauge {{
+            width: 100px;
+            height: 100px;
+        }}
+        
+        .ats-gauge-number {{
+            font-size: 1.5rem;
+        }}
+        
+        .ats-gauge-label {{
+            font-size: 0.75rem;
+        }}
+        
+        /* Full-width upload zone */
+        .upload-zone {{
+            padding: 1.5rem 1rem;
+        }}
+        
+        /* Score bars */
+        .score-bar-container {{
+            margin: 0.5rem 0;
+        }}
+        
+        .score-bar-label, .score-bar-value {{
+            font-size: 0.8rem;
+        }}
+    }}
+    
+    /* Touch device optimizations */
+    @media (hover: none) and (pointer: coarse) {{
+        .glass-card:hover,
+        .bento-item:hover,
+        .magnetic-button:hover {{
+            transform: none;
+        }}
+        
+        .tilt-card {{
+            perspective: none;
+        }}
+        
+        .tilt-inner {{
+            transform: none !important;
+        }}
+    }}
+    
+    /* Safe area for notched devices */
+    @supports (padding: max(0px)) {{
+        .stApp {{
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+        }}
+    }}
     </style>
     """
 
