@@ -951,7 +951,33 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig, pro
 
 
 def render_step_3_download():
-    """Step 3: Download Results with celebration effects"""
+    """Step 3: Download Results with celebration effects and edit option"""
+    
+    # Check if we're in edit mode
+    if st.session_state.get('edit_mode', False):
+        # Import and render resume editor
+        try:
+            from ui.resume_editor import ResumeEditor
+            api_keys = get_api_keys()
+            
+            editor = ResumeEditor(
+                st.session_state.tailored_resume,
+                api_keys.get("nvidia", "")
+            )
+            
+            edited_resume = editor.render_editor()
+            
+            if edited_resume:
+                # User finalized the edits
+                st.session_state.tailored_resume = edited_resume
+                st.session_state.edit_mode = False
+                st.rerun()
+            
+            return  # Don't show download section while editing
+            
+        except Exception as e:
+            st.error(f"Error loading resume editor: {e}")
+            st.session_state.edit_mode = False
     
     tailored = st.session_state.tailored_resume
     job_analysis = st.session_state.job_analysis
@@ -1087,16 +1113,32 @@ def render_step_3_download():
         try:
             pdf_bytes = generate_pdf_to_bytes(tailored)
             
-            # Download button with animation
-            col1, col2, col3 = st.columns([1, 2, 1])
+            # Action buttons: Edit and Download
+            st.markdown("### What would you like to do?")
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            
+            with col1:
+                if st.button("✏️ Edit Resume", use_container_width=True):
+                    st.session_state.edit_mode = True
+                    st.rerun()
+            
             with col2:
                 st.download_button(
-                    label="📥 Download Tailored Resume (PDF)",
+                    label="📥 Download Resume (PDF)",
                     data=pdf_bytes,
                     file_name=f"{tailored.basics.name.replace(' ', '_')}_Tailored_Resume.pdf",
                     mime="application/pdf",
-                    use_container_width=True
+                    use_container_width=True,
+                    type="primary"
                 )
+            
+            with col3:
+                # Add share option (placeholder for now)
+                if st.button("📤 Share", use_container_width=True, disabled=True):
+                    pass
+                
+            st.info("💡 **Tip:** Click 'Edit Resume' to make custom changes with AI assistance before downloading.")
         except Exception as e:
             st.error(f"Error generating PDF: {e}")
     
