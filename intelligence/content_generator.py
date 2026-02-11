@@ -75,6 +75,134 @@ class ContentGenerator:
         
         return tailored, job_analysis
     
+    def optimize_for_ats_only(
+        self,
+        resume: ParsedResume,
+        config: GenerationConfig
+    ) -> Tuple[TailoredResume, JobAnalysis]:
+        """
+        Optimize resume for ATS without job description
+        Single pass, no regeneration, no new fabricated content
+        Target ATS: 90
+        """
+        from intelligence.ai_client import MistralAIClient
+        
+        # Create a generic job analysis for ATS optimization
+        job_analysis = JobAnalysis(
+            role_title="Software Engineer",
+            seniority_level="mid",
+            years_experience_required=3,
+            key_skills=["programming", "software development", "problem solving"],
+            nice_to_have_skills=[],
+            industry="technology",
+            company_type="enterprise",
+            role_focus_areas=["backend", "frontend", "full-stack"],
+            missing_from_resume=[],
+            match_score=85.0
+        )
+        
+        # Generate ATS-optimized content using AI
+        client = MistralAIClient(self.api_key)
+        
+        # Build prompt for ATS-only optimization
+        resume_json = resume.json()
+        
+        prompt = f"""Optimize this resume for ATS compatibility WITHOUT adding new experience:
+
+ORIGINAL RESUME (JSON):
+{resume_json}
+
+STRICT RULES:
+1. SINGLE PASS - Generate once, no iterations
+2. Target ATS Score: 90
+3. NO new experience - only improve existing content
+4. NO fabricated projects or skills
+5. Keep same structure and sections
+6. Maintain all original dates, companies, and roles
+
+IMPROVEMENTS TO MAKE:
+- Rewrite bullets using STAR format (Situation, Task, Action, Result)
+- Add quantification where missing (use realistic estimates if needed)
+- Use stronger action verbs
+- Optimize keywords for software engineering roles
+- Fix grammar and clarity
+- Ensure every bullet has metrics
+
+IMPORTANT:
+- Keep all existing job entries
+- Keep all existing dates
+- Only rewrite bullet text
+- Make bullets more impactful and measurable
+
+Return the optimized resume in the same JSON format with all fields preserved."""
+
+        # Call AI to optimize
+        response = client.generate_content(prompt, temperature=0.2, max_tokens=4096)
+        
+        # Parse response
+        import json
+        import re
+        
+        try:
+            # Extract JSON from response
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                optimized_data = json.loads(json_match.group())
+                
+                # Create TailoredResume from optimized data
+                tailored = TailoredResume(
+                    basics=resume.basics,
+                    summary=optimized_data.get("summary", resume.summary),
+                    education=resume.education,
+                    experience=[],
+                    skills=resume.skills,
+                    projects=resume.projects if config.include_projects else [],
+                    achievements=resume.achievements if config.include_achievements else [],
+                    fabrication_notes=["ATS-optimized version of original resume (no new content added)"]
+                )
+                
+                # Parse experience from optimized data
+                for exp_data in optimized_data.get("experience", []):
+                    exp = Experience(
+                        company=exp_data.get("company", ""),
+                        location=exp_data.get("location", ""),
+                        role=exp_data.get("role", ""),
+                        startDate=exp_data.get("startDate", ""),
+                        endDate=exp_data.get("endDate", ""),
+                        bullets=exp_data.get("bullets", []),
+                        is_fabricated=False
+                    )
+                    tailored.experience.append(exp)
+                
+                # If no experience parsed, use original
+                if not tailored.experience:
+                    tailored.experience = resume.experience
+                
+                # Calculate ATS score
+                ats_score = self.ats_scorer.calculate_ats_score(tailored, job_analysis)
+                tailored.ats_score = ats_score
+                
+                return tailored, job_analysis
+                
+        except Exception as e:
+            print(f"DEBUG: ATS-only optimization error: {e}")
+            # Fallback: return original with basic improvements
+            tailored = TailoredResume(
+                basics=resume.basics,
+                summary=resume.summary,
+                education=resume.education,
+                experience=resume.experience,
+                skills=resume.skills,
+                projects=resume.projects if config.include_projects else [],
+                achievements=resume.achievements if config.include_achievements else [],
+                fabrication_notes=["Error in ATS optimization - using original"]
+            )
+            
+            ats_score = self.ats_scorer.calculate_ats_score(tailored, job_analysis)
+            tailored.ats_score = ats_score
+            
+            return tailored, job_analysis
+    
     def _generate_content(
         self,
         resume: ParsedResume,

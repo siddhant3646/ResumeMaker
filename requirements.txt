@@ -17,3 +17,9 @@ google-generativeai>=0.8.0
 cryptography>=42.0.0
 pdfplumber>=0.11.0
 
+# Authentication
+PyJWT>=2.8.0
+
+# Redis & Caching (for Issues #2 and #4)
+redis>=5.0.0
+

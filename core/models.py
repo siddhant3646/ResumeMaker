@@ -180,9 +180,16 @@ class ValidationReport(BaseModel):
         return any(issue in self.issues for issue in critical)
 
 
+class GenerationMode(str, Enum):
+    """Generation mode - with or without job description"""
+    TAILOR_WITH_JD = "tailor_with_jd"
+    ATS_OPTIMIZE_ONLY = "ats_optimize_only"
+
+
 class GenerationConfig(BaseModel):
     """Configuration for resume generation"""
     # Core Settings
+    generation_mode: GenerationMode = GenerationMode.TAILOR_WITH_JD
     page_match_mode: Literal["optimize", "force_1_page", "force_2_pages"] = "optimize"
     target_pages: Optional[int] = None  # None = optimize mode, 1 or 2 = force specific
     

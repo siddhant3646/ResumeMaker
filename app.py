@@ -70,7 +70,7 @@ except ImportError:
 # Import core models - try relative imports first
 try:
     from core.models import (
-        ParsedResume, TailoredResume, JobAnalysis, GenerationConfig,
+        ParsedResume, TailoredResume, JobAnalysis, GenerationConfig, GenerationMode,
         ATSScore, ValidationReport, GenerationResult, UIState, Experience, Project
     )
 except ImportError:
@@ -79,7 +79,7 @@ except ImportError:
     from pathlib import Path
     sys.path.append(str(Path(__file__).parent))
     from core.models import (
-        ParsedResume, TailoredResume, JobAnalysis, GenerationConfig,
+        ParsedResume, TailoredResume, JobAnalysis, GenerationConfig, GenerationMode,
         ATSScore, ValidationReport, GenerationResult, UIState, Experience, Project
     )
 
@@ -119,6 +119,24 @@ try:
     GOOGLE_GENAI_AVAILABLE = True
 except ImportError:
     GOOGLE_GENAI_AVAILABLE = False
+
+# Import Auth0 authentication
+try:
+    from auth.auth0_manager import get_auth_manager
+    AUTH0_AVAILABLE = True
+    _auth_manager = get_auth_manager
+except ImportError:
+    AUTH0_AVAILABLE = False
+    _auth_manager = None
+    print("⚠️ Auth0 not available - authentication disabled")
+
+# Import Processing Guard
+try:
+    from utils.processing_guard import ProcessingGuard, ProcessingStatus
+    PROCESSING_GUARD_AVAILABLE = True
+except ImportError:
+    PROCESSING_GUARD_AVAILABLE = False
+    print("⚠️ ProcessingGuard not available")
 
 
 # ============================================================================
@@ -257,6 +275,16 @@ def render_settings_panel(config: GenerationConfig) -> GenerationConfig:
 def main():
     """Main application entry point"""
     configure_page()
+    
+    # Initialize Auth0 and require authentication
+    if AUTH0_AVAILABLE and _auth_manager is not None:
+        auth_manager = _auth_manager()
+        if not auth_manager.require_auth():
+            # User not authenticated - show login screen only
+            return
+        
+        # User is authenticated - show user info in header
+        auth_manager.render_user_header()
     
     # Initialize session state
     if 'step' not in st.session_state:
@@ -463,37 +491,105 @@ def render_step_1_upload():
 
 def render_step_2_job_description():
     """Step 2: Job Description & Settings"""
-    st.header("💼 Job Description")
+    st.header("💼 Optimize Your Resume")
     
-    st.markdown("""
-    Paste the job description you're applying for. Our AI will:
-    - Detect the role and seniority level
-    - Identify required skills and keywords
-    - Generate optimized content using STAR/XYZ format
-    - Achieve >90 ATS score for FAANG/MAANG applications
-    """)
+    # Mode selector
+    st.subheader("Choose Optimization Mode")
+    
+    mode_col1, mode_col2 = st.columns(2)
+    
+    with mode_col1:
+        if st.button(
+            "🎯 Tailor for Specific Job",
+            type="primary" if st.session_state.generation_config.generation_mode.value == "tailor_with_jd" else "secondary",
+            use_container_width=True
+        ):
+            st.session_state.generation_config.generation_mode = GenerationMode.TAILOR_WITH_JD
+            st.rerun()
+        st.caption("Optimize resume for a specific job description")
+    
+    with mode_col2:
+        if st.button(
+            "⚡ ATS Optimization Only",
+            type="primary" if st.session_state.generation_config.generation_mode.value == "ats_optimize_only" else "secondary",
+            use_container_width=True
+        ):
+            st.session_state.generation_config.generation_mode = GenerationMode.ATS_OPTIMIZE_ONLY
+            st.rerun()
+        st.caption("Improve existing content for ATS without adding new experience")
+    
+    st.markdown("---")
+    
+    # Show different UI based on mode
+    is_ats_only_mode = st.session_state.generation_config.generation_mode == GenerationMode.ATS_OPTIMIZE_ONLY
+    
+    if is_ats_only_mode:
+        st.markdown("""
+        ### ⚡ ATS-Only Optimization Mode
+        
+        Your resume will be optimized for ATS systems:
+        - ✅ Rewrite existing bullets using STAR format
+        - ✅ Add quantification and metrics
+        - ✅ Use stronger action verbs
+        - ✅ Optimize keywords for software roles
+        - ✅ **No new experience added** - only improves existing content
+        - ✅ Single pass generation (faster)
+        - ✅ Target ATS Score: **90**
+        """)
+        job_description = ""  # No JD needed in this mode
+    else:
+        st.markdown("""
+        ### 🎯 Job-Specific Tailoring Mode
+        
+        Your resume will be tailored to match the job description:
+        - Detect the role and seniority level
+        - Identify required skills and keywords
+        - Generate optimized content using STAR/XYZ format
+        - Achieve >90 ATS score for FAANG/MAANG applications
+        """)
+        
+        # Job description input
+        job_description = st.text_area(
+            "Job Description",
+            height=250,
+            placeholder="Paste the complete job description here...",
+            help="Include all requirements, responsibilities, and qualifications"
+        )
     
     # Settings panel
     config = render_settings_panel(st.session_state.generation_config)
     st.session_state.generation_config = config
     
-    # Job description input
-    job_description = st.text_area(
-        "Job Description",
-        height=250,
-        placeholder="Paste the complete job description here...",
-        help="Include all requirements, responsibilities, and qualifications"
-    )
+    # Initialize Processing Guard
+    processing_guard = None
+    processing_status = None
+    if PROCESSING_GUARD_AVAILABLE:
+        from utils.processing_guard import ProcessingGuard, ProcessingStatus
+        processing_guard = ProcessingGuard(timeout_seconds=300)
+        processing_status = ProcessingStatus()
+        # Check for stale processing and reset if needed
+        if processing_guard.force_reset_if_stale():
+            st.warning("⚠️ Previous session timed out. Please try again.")
+            st.rerun()
     
     # Check if already processing
     is_already_processing = st.session_state.get('is_processing', False)
+    if processing_guard and processing_guard.is_processing():
+        is_already_processing = True
+    
+    # Show processing warning if active
+    if processing_guard and processing_status and is_already_processing:
+        processing_status.show_processing_warning(processing_guard)
     
     # Buttons
     col1, col2 = st.columns([1, 3])
     with col1:
         if st.button("← Back", use_container_width=True):
             st.session_state.step = 1
-            st.session_state.is_processing = False
+            if processing_guard:
+                processing_guard.reset()
+            else:
+                st.session_state.is_processing = False
             st.rerun()
     
     with col2:
@@ -506,16 +602,35 @@ def render_step_2_job_description():
     # Animation container below both buttons
     animation_container = st.container()
     
-    if tailor_clicked and not st.session_state.is_processing:
-        if not job_description.strip():
-            st.warning("⚠️ Please enter a job description.")
-        else:
-            st.session_state.is_processing = True
+    # Handle button click with ProcessingGuard
+    if tailor_clicked:
+        # Validate input based on mode
+        if not is_ats_only_mode and not job_description.strip():
+            st.warning("⚠️ Please enter a job description or switch to ATS-Only mode.")
+            return
+        
+        # Set target score based on mode
+        if is_ats_only_mode:
+            config.target_ats_score = 90
+            config.max_regeneration_attempts = 1  # Single pass for ATS-only mode
+            # Check if we can start processing (debounce + timeout check)
+            if processing_guard:
+                user_id = None
+                if st.session_state.get("user"):
+                    user_id = st.session_state["user"].get("sub")
+                if not processing_guard.can_start_processing(user_id):
+                    if processing_status:
+                        processing_status.show_debounce_message()
+                    return
+                processing_guard.start(user_id=user_id)
+            else:
+                st.session_state.is_processing = True
+            
             with animation_container:
-                process_resume_tailoring(job_description, config)
+                process_resume_tailoring(job_description, config, processing_guard)
 
 
-def process_resume_tailoring(job_description: str, config: GenerationConfig):
+def process_resume_tailoring(job_description: str, config: GenerationConfig, processing_guard=None):
     """Process resume tailoring with full animation pipeline and regeneration loop"""
     api_keys = get_api_keys()
     
@@ -523,12 +638,16 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         st.error("⚠️ NVIDIA API key not configured. Please set up your NVIDIA API key in the configuration for Mistral Large 3.")
         return
     
+    # Check if ATS-only mode
+    is_ats_only_mode = config.generation_mode == GenerationMode.ATS_OPTIMIZE_ONLY
+    
     # Create placeholders for dynamic updates
     status_placeholder = st.empty()
     progress_bar = st.progress(0.05)
     info_placeholder = st.empty()
     
-    MAX_ATTEMPTS = 10
+    # Set max attempts based on mode
+    MAX_ATTEMPTS = 1 if is_ats_only_mode else 10
     
     # Stage 1: Initializing
     status_placeholder.markdown(
@@ -552,6 +671,33 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         progress_bar.progress(0.15)
         resume = st.session_state.parsed_resume
         time.sleep(0.5)
+        
+        # Handle ATS-Only Mode (single pass, no JD)
+        if is_ats_only_mode:
+            info_placeholder.info("⚡ Optimizing resume for ATS compatibility...")
+            
+            tailored, job_analysis = content_gen.optimize_for_ats_only(resume, config)
+            
+            # Store results
+            st.session_state.tailored_resume = tailored
+            st.session_state.job_analysis = job_analysis
+            
+            # Show completion
+            progress_bar.progress(1.0)
+            status_placeholder.markdown(
+                animation_manager.get_stage_html('complete'),
+                unsafe_allow_html=True
+            )
+            
+            ats_score = tailored.ats_score.overall if tailored.ats_score else 0
+            st.success(f"✅ Resume optimized! ATS Score: {ats_score}/100")
+            
+            time.sleep(1.5)
+            st.session_state.step = 3
+            st.rerun()
+            return
+        
+        # Continue with JD-based tailoring mode (original logic)
         
         # Regeneration loop
         best_tailored = None
@@ -660,14 +806,11 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
                 # Store for next iteration
                 st.session_state.last_page_status = page_status
                 
-                # Show page status in UI
+                # Show page status in UI (simplified - no detailed percentages during generation)
                 needs_consolidate = "CONSOLIDATE" in (page_status.suggestion or "")
-                if page_status.needs_content:
-                    st.warning(f"⚠️ Page {page_status.current_page}: {page_status.fill_percentage}% filled (need 95%)")
-                elif needs_consolidate:
-                    st.warning(f"⚠️ Page {page_status.current_page} is sparse ({page_status.fill_percentage}%). Will consolidate to fit on 1 page.")
-                else:
-                    st.success(f"✅ Perfect page fill: {page_status.fill_percentage}%")
+                if page_status.needs_content or needs_consolidate:
+                    # Silently continue - detailed feedback only shown at completion
+                    pass
                     
             except Exception as e:
                 print(f"DEBUG: Page check error: {e}")
@@ -676,49 +819,25 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
             # Store ATS feedback for next iteration
             previous_ats_feedback = tailored.ats_score if tailored else None
             
-            # Show ATS score with real-time UI
+            # SIMPLIFIED UI: Show only progress bar with generic messages (Issue #6)
             if tailored and tailored.ats_score:
-                # Update progress based on best score
-                score_progress = min(best_score / 100, 0.9)
+                # Update progress bar smoothly (0.15 to 0.95)
+                score_progress = min(0.95, 0.15 + (attempt / MAX_ATTEMPTS) * 0.8)
                 progress_bar.progress(score_progress)
                 
-                # Real-time scoring metrics
-                score_col1, score_col2, score_col3 = st.columns(3)
+                # Generic rotating status messages (no detailed scores during generation)
+                status_messages = [
+                    "📄 Analyzing your experience...",
+                    "✨ Optimizing content structure...",
+                    "🎯 Matching with job requirements...",
+                    "⚡ Enhancing bullet points...",
+                    "📝 Applying best practices...",
+                    "🔧 Finalizing your resume..."
+                ]
+                message_index = (attempt - 1) % len(status_messages)
+                info_placeholder.info(status_messages[message_index])
                 
-                with score_col1:
-                    delta = tailored.ats_score.overall - best_score if attempt > 1 else None
-                    st.metric(
-                        label="🎯 Current ATS Score",
-                        value=f"{tailored.ats_score.overall}/100",
-                        delta=f"{delta:+d}" if delta else None
-                    )
-                
-                with score_col2:
-                    st.metric(
-                        label="📈 Best Score So Far",
-                        value=f"{best_score}/100"
-                    )
-                
-                with score_col3:
-                    st.metric(
-                        label="🔄 Attempts Remaining",
-                        value=f"{MAX_ATTEMPTS - attempt}"
-                    )
-                
-                # Score breakdown in expander
-                with st.expander("📊 Score Breakdown", expanded=True):
-                    cols = st.columns(4)
-                    cols[0].metric("Keywords", f"{tailored.ats_score.keyword_match}%")
-                    cols[1].metric("STAR Format", f"{tailored.ats_score.star_compliance}%")
-                    cols[2].metric("Quantification", f"{tailored.ats_score.quantification}%")
-                    cols[3].metric("Action Verbs", f"{tailored.ats_score.action_verb_strength}%")
-                
-                # Show feedback for next iteration
-                if tailored.ats_score.overall < config.target_ats_score:
-                    if tailored.ats_score.missing_keywords:
-                        st.info(f"🔍 Missing Keywords to Add: {', '.join(tailored.ats_score.missing_keywords[:5])}")
-                    if tailored.ats_score.shortcomings:
-                        st.warning(f"⚠️ Issues to Fix: {', '.join(tailored.ats_score.shortcomings[:3])}")
+                # NO detailed scores shown during generation - only at completion
                 
                 # Show current animation
                 status_placeholder.markdown(
@@ -825,8 +944,10 @@ def process_resume_tailoring(job_description: str, config: GenerationConfig):
         import traceback
         st.code(traceback.format_exc())
     finally:
-        # Always reset processing state
+        # Always reset processing state - both legacy and ProcessingGuard
         st.session_state.is_processing = False
+        if processing_guard:
+            processing_guard.reset()
 
 
 def render_step_3_download():
