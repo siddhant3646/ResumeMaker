@@ -8,6 +8,7 @@ import json
 from typing import Optional, Dict, Any
 import base64
 from datetime import datetime
+import os
 
 # Try to import PyJWT
 try:
@@ -23,15 +24,26 @@ class Auth0Manager:
     """
     
     def __init__(self):
-        """Initialize Auth0 configuration from secrets"""
+        """Initialize Auth0 configuration from secrets or environment variables"""
         try:
-            self.domain = st.secrets.get("AUTH0_DOMAIN", "")
-            self.client_id = st.secrets.get("AUTH0_CLIENT_ID", "")
-            self.client_secret = st.secrets.get("AUTH0_CLIENT_SECRET", "")
-            self.redirect_uri = st.secrets.get("AUTH0_REDIRECT_URI", "")
+            # Try to get from Streamlit secrets first (local development)
+            # Fall back to environment variables (production/Render)
+            self.domain = st.secrets.get("AUTH0_DOMAIN", "") or os.environ.get("AUTH0_DOMAIN", "")
+            self.client_id = st.secrets.get("AUTH0_CLIENT_ID", "") or os.environ.get("AUTH0_CLIENT_ID", "")
+            self.client_secret = st.secrets.get("AUTH0_CLIENT_SECRET", "") or os.environ.get("AUTH0_CLIENT_SECRET", "")
+            self.redirect_uri = st.secrets.get("AUTH0_REDIRECT_URI", "") or os.environ.get("AUTH0_REDIRECT_URI", "")
             
             if not all([self.domain, self.client_id, self.client_secret]):
-                st.error("⚠️ Auth0 credentials not configured. Please set AUTH0_DOMAIN, AUTH0_CLIENT_ID, and AUTH0_CLIENT_SECRET in secrets.")
+                missing = []
+                if not self.domain:
+                    missing.append("AUTH0_DOMAIN")
+                if not self.client_id:
+                    missing.append("AUTH0_CLIENT_ID")
+                if not self.client_secret:
+                    missing.append("AUTH0_CLIENT_SECRET")
+                
+                st.error(f"⚠️ Auth0 credentials not configured. Missing: {', '.join(missing)}")
+                st.info("Please set these in either .streamlit/secrets.toml (local) or as environment variables (production).")
                 self.enabled = False
             else:
                 self.enabled = True
