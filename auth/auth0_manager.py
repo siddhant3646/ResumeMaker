@@ -26,12 +26,22 @@ class Auth0Manager:
     def __init__(self):
         """Initialize Auth0 configuration from secrets or environment variables"""
         try:
-            # Try to get from Streamlit secrets first (local development)
-            # Fall back to environment variables (production/Render)
-            self.domain = st.secrets.get("AUTH0_DOMAIN", "") or os.environ.get("AUTH0_DOMAIN", "")
-            self.client_id = st.secrets.get("AUTH0_CLIENT_ID", "") or os.environ.get("AUTH0_CLIENT_ID", "")
-            self.client_secret = st.secrets.get("AUTH0_CLIENT_SECRET", "") or os.environ.get("AUTH0_CLIENT_SECRET", "")
-            self.redirect_uri = st.secrets.get("AUTH0_REDIRECT_URI", "") or os.environ.get("AUTH0_REDIRECT_URI", "")
+            # Helper function to get config from secrets or env
+            def get_config(key):
+                # Try Streamlit secrets first (local development)
+                try:
+                    secret_val = st.secrets.get(key, "")
+                    if secret_val:
+                        return secret_val
+                except:
+                    pass
+                # Fall back to environment variables (production/Render)
+                return os.environ.get(key, "")
+            
+            self.domain = get_config("AUTH0_DOMAIN")
+            self.client_id = get_config("AUTH0_CLIENT_ID")
+            self.client_secret = get_config("AUTH0_CLIENT_SECRET")
+            self.redirect_uri = get_config("AUTH0_REDIRECT_URI")
             
             if not all([self.domain, self.client_id, self.client_secret]):
                 missing = []
