@@ -627,25 +627,26 @@ def render_step_2_job_description():
             st.warning("⚠️ Please enter a job description or switch to ATS-Only mode.")
             return
         
-        # Set target score based on mode
+        # Set target score and max attempts based on mode
         if is_ats_only_mode:
             config.target_ats_score = 90
             config.max_regeneration_attempts = 1  # Single pass for ATS-only mode
-            # Check if we can start processing (debounce + timeout check)
-            if processing_guard:
-                user_id = None
-                if st.session_state.get("user"):
-                    user_id = st.session_state["user"].get("sub")
-                if not processing_guard.can_start_processing(user_id):
-                    if processing_status:
-                        processing_status.show_debounce_message()
-                    return
-                processing_guard.start(user_id=user_id)
-            else:
-                st.session_state.is_processing = True
-            
-            with animation_container:
-                process_resume_tailoring(job_description, config, processing_guard)
+        
+        # Check if we can start processing (debounce + timeout check)
+        if processing_guard:
+            user_id = None
+            if st.session_state.get("user"):
+                user_id = st.session_state["user"].get("sub")
+            if not processing_guard.can_start_processing(user_id):
+                if processing_status:
+                    processing_status.show_debounce_message()
+                return
+            processing_guard.start(user_id=user_id)
+        else:
+            st.session_state.is_processing = True
+        
+        with animation_container:
+            process_resume_tailoring(job_description, config, processing_guard)
 
 
 def process_resume_tailoring(job_description: str, config: GenerationConfig, processing_guard=None):
