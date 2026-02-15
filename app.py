@@ -192,17 +192,30 @@ def decrypt_api_key_from_secrets(encrypted_string: str, password: str) -> str:
 
 
 def get_api_keys() -> Dict[str, str]:
-    """Get API keys from secrets (encrypted) or environment"""
+    """Get API keys from secrets (encrypted), environment variables, or .env file"""
     try:
-        # Get encryption password and encrypted keys from Streamlit secrets
-        encryption_password = st.secrets.get("ENCRYPTION_PASSWORD", "")
-        google_encrypted = st.secrets.get("GOOGLE_API_KEY_ENCRYPTED", "")
-        nvidia_encrypted = st.secrets.get("NVIDIA_API_KEY_ENCRYPTED", "")
+        import os
         
-        if encryption_password and nvidia_encrypted:
-            nvidia_key = decrypt_api_key_from_secrets(nvidia_encrypted, encryption_password)
-        else:
-            nvidia_key = ""
+        # Try to get from environment variables first (for production/Render)
+        nvidia_key = os.environ.get("NVIDIA_API_KEY", "")
+        
+        # If not found in env, try Streamlit secrets (for local development)
+        if not nvidia_key:
+            try:
+                encryption_password = st.secrets.get("ENCRYPTION_PASSWORD", "")
+                nvidia_encrypted = st.secrets.get("NVIDIA_API_KEY_ENCRYPTED", "")
+                
+                if encryption_password and nvidia_encrypted:
+                    nvidia_key = decrypt_api_key_from_secrets(nvidia_encrypted, encryption_password)
+            except Exception:
+                pass
+        
+        # Final fallback - try direct secret (unencrypted)
+        if not nvidia_key:
+            try:
+                nvidia_key = st.secrets.get("NVIDIA_API_KEY", "")
+            except Exception:
+                pass
         
         return {
             "nvidia": nvidia_key,
@@ -210,7 +223,7 @@ def get_api_keys() -> Dict[str, str]:
             "gemma": "" # Gemma is no longer used for text tasks
         }
     except Exception as e:
-        st.error(f"Error decrypting API keys: {e}")
+        st.error(f"Error loading API keys: {e}")
         return {
             "nvidia": "",
             "gemma": ""
