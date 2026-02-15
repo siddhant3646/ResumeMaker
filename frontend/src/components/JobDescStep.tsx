@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { generateResume, optimizeATS } from '../services/api'
 import toast from 'react-hot-toast'
 

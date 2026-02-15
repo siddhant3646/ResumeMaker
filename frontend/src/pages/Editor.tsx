@@ -66,7 +66,7 @@ export default function Editor() {
 
         <div className="flex gap-3">
           <button
-            onClick={() => toast.info('Edit feature coming soon!')}
+            onClick={() => toast('Edit feature coming soon!', { icon: 'ℹ️' })}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-colors"
           >
             <Edit3 className="h-4 w-4" />
@@ -162,7 +162,7 @@ export default function Editor() {
 
       <div className="flex justify-center mt-8">
         <button
-          onClick={() => toast.info('AI suggestions coming soon!')}
+          onClick={() => toast('AI suggestions coming soon!', { icon: '✨' })}
           className="flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors"
         >
           <Sparkles className="h-5 w-5" />

@@ -3,6 +3,9 @@ ResumeMaker AI - FastAPI Backend
 2026 Edition with React Frontend
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, UploadFile, File, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Upload, FileText, Download, ChevronRight, Check } from 'lucide-react'
+import { Upload, FileText, Download, Check } from 'lucide-react'
 import UploadStep from '../components/UploadStep'
 import JobDescStep from '../components/JobDescStep'
 import ProgressStep from '../components/ProgressStep'
