@@ -1,0 +1,29 @@
+# Render deployment configuration for FastAPI Backend
+services:
+  - type: web
+    name: resumemaker-api
+    runtime: docker
+    repo: https://github.com/siddhant3646/ResumeMaker
+    branch: feature/react-fastapi-migration
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 8000
+      - key: ENVIRONMENT
+        value: production
+      # CORS - Frontend URL (will be updated after Vercel deployment)
+      - key: FRONTEND_URL
+        value: https://resume-maker.vercel.app
+      # Auth0 Configuration
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_AUDIENCE
+        sync: false
+      # NVIDIA API Key
+      - key: NVIDIA_API_KEY
+        sync: false
+    healthCheckPath: /api/health
+    plan: free
