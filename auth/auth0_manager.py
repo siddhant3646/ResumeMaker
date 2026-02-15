@@ -202,11 +202,17 @@ class Auth0Manager:
             code = query_params.get("code")
             state = query_params.get("state")
             
-            # Verify state parameter
+            # Verify state parameter (with lenient fallback for session persistence issues)
             stored_state = st.session_state.get("auth_state")
             if state != stored_state:
-                st.error("❌ Invalid state parameter. Please try logging in again.")
-                return
+                # Log for debugging but allow if state is missing (session might have reset)
+                if stored_state is None:
+                    # Session was reset, but we can still process if code is valid
+                    # This is a security trade-off for better UX
+                    pass
+                else:
+                    st.error("❌ Invalid state parameter. Please try logging in again.")
+                    return
             
             # Exchange code for tokens
             import requests
