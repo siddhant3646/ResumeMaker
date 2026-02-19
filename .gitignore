@@ -63,3 +63,4 @@ temp/
 # Helper scripts that might contain sensitive data
 encrypt_helper.py
 
+frontend/node_modules/
