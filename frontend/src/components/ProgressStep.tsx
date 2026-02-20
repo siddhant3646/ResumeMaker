@@ -9,15 +9,15 @@ interface ProgressStepProps {
 }
 
 const steps = [
-  { id: 1, label: 'Analyzing', icon: FileText },
-  { id: 2, label: 'Optimizing', icon: Sparkles },
-  { id: 3, label: 'Finalizing', icon: Zap },
+  { id: 1, label: 'Analyzing Context', icon: FileText },
+  { id: 2, label: 'Optimizing Value', icon: Sparkles },
+  { id: 3, label: 'Finalizing Output', icon: Zap },
 ]
 
 export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('pending')
-  const [message, setMessage] = useState('Initializing...')
+  const [message, setMessage] = useState('Initializing optimization sequence...')
   const [error, setError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
@@ -37,11 +37,11 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
         setMessage(data.message)
 
         if (data.status === 'completed') {
-          toast.success('Resume generated successfully!')
-          setTimeout(onComplete, 1500)
+          toast.success('Resume optimized successfully!', { style: { borderRadius: '12px', background: '#059669', color: '#fff' } })
+          setTimeout(onComplete, 1800)
         } else if (data.status === 'failed') {
           setError(data.error || 'Generation failed')
-          toast.error(data.error || 'Generation failed')
+          toast.error(data.error || 'Optimization process failed')
         }
       }
 
@@ -73,12 +73,12 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
 
         if (data.status === 'completed') {
           clearInterval(pollInterval)
-          toast.success('Resume generated successfully!')
-          setTimeout(onComplete, 1500)
+          toast.success('Resume optimized successfully!', { style: { borderRadius: '12px', background: '#059669', color: '#fff' } })
+          setTimeout(onComplete, 1800)
         } else if (data.status === 'failed') {
           clearInterval(pollInterval)
           setError(data.error || 'Generation failed')
-          toast.error(data.error || 'Generation failed')
+          toast.error(data.error || 'Optimization process failed')
         }
       } catch (error) {
         console.error('Polling error:', error)
@@ -89,51 +89,51 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
   const currentStepIndex = Math.min(Math.floor(progress / 33.33), 2)
 
   return (
-    <div className="py-6 space-y-8">
+    <div className="py-10 space-y-10 animate-fade-in max-w-lg mx-auto">
       {/* Status Header */}
       <div className="text-center">
         {status === 'completed' ? (
           <div className="animate-scale-in">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/30">
-              <CheckCircle className="w-10 h-10 text-white" />
+            <div className="w-24 h-24 mx-auto mb-6 rounded-[1.5rem] bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-[0_10px_40px_rgba(52,211,153,0.3)]">
+              <CheckCircle className="w-12 h-12 text-white drop-shadow-sm" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Resume Ready!</h2>
-            <p className="text-slate-400">Redirecting to editor...</p>
+            <h2 className="text-3xl font-bold text-white tracking-tight mb-2">Resume Ready!</h2>
+            <p className="text-zinc-400 font-medium">Redirecting to preview editor...</p>
           </div>
         ) : status === 'failed' ? (
           <div className="animate-scale-in">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center shadow-lg shadow-red-500/30">
-              <AlertCircle className="w-10 h-10 text-white" />
+            <div className="w-24 h-24 mx-auto mb-6 rounded-[1.5rem] bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center shadow-[0_10px_40px_rgba(239,68,68,0.3)]">
+              <AlertCircle className="w-12 h-12 text-white drop-shadow-sm" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Generation Failed</h2>
-            <p className="text-red-400">{error}</p>
+            <h2 className="text-3xl font-bold text-white tracking-tight mb-2">Generation Failed</h2>
+            <p className="text-red-400 font-medium max-w-sm mx-auto">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-6 btn-primary text-white"
+              className="mt-8 btn-primary px-8"
             >
               Try Again
             </button>
           </div>
         ) : (
           <div className="animate-fade-in">
-            <div className="relative w-20 h-20 mx-auto mb-4">
+            <div className="relative w-24 h-24 mx-auto mb-8 drop-shadow-xl">
               {/* Spinning Background */}
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 animate-spin-slow opacity-50"></div>
+              <div className="absolute inset-0 rounded-[1.5rem] bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 animate-[spin_4s_linear_infinite] opacity-60 mix-blend-screen"></div>
               {/* Inner Container */}
-              <div className="absolute inset-1 rounded-xl bg-slate-900 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+              <div className="absolute inset-[3px] rounded-[1.3rem] bg-zinc-950 flex items-center justify-center shadow-inner">
+                <Loader2 className="w-10 h-10 animate-spin text-indigo-400 drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
               </div>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Optimizing Your Resume</h2>
-            <p className="text-slate-400">{message}</p>
+            <h2 className="text-3xl font-extrabold text-white tracking-tight mb-3">Optimizing Your Resume</h2>
+            <p className="text-zinc-400 font-medium h-6 text-[15px]">{message}</p>
           </div>
         )}
       </div>
 
       {/* Progress Steps */}
       {status !== 'completed' && status !== 'failed' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-center gap-2">
+        <div className="space-y-6">
+          <div className="flex items-center justify-center -mx-4 relative z-10">
             {steps.map((step, index) => {
               const Icon = step.icon
               const isActive = index === currentStepIndex
@@ -143,30 +143,29 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
                 <div key={step.id} className="flex items-center">
                   <div className="flex flex-col items-center">
                     <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-500 ${
-                        isCompleted
-                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/25'
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-700 ease-out ${isCompleted
+                          ? 'bg-gradient-to-br from-emerald-400 to-teal-500 shadow-[0_5px_20px_rgba(52,211,153,0.3)] scale-100'
                           : isActive
-                          ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25 animate-pulse'
-                          : 'glass'
-                      }`}
+                            ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-[0_5px_20px_rgba(99,102,241,0.4)] scale-110 mb-1'
+                            : 'glass-dark'
+                        }`}
                     >
                       {isCompleted ? (
-                        <CheckCircle className="w-5 h-5 text-white" />
+                        <CheckCircle className="w-6 h-6 text-white" />
                       ) : (
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                        <Icon className={`w-6 h-6 transition-colors duration-500 ${isActive ? 'text-white' : 'text-zinc-600'}`} />
                       )}
                     </div>
-                    <span className={`text-xs mt-2 ${isActive ? 'text-white' : 'text-slate-500'}`}>
+                    {/* Make label absolute to prevent layout shifts from scale */}
+                    <span className={`absolute mt-16 text-[11px] font-bold uppercase tracking-wider transition-colors duration-500 ${isActive ? 'text-white' : isCompleted ? 'text-zinc-300' : 'text-zinc-600'}`}>
                       {step.label}
                     </span>
                   </div>
                   {index < steps.length - 1 && (
-                    <div className="w-12 h-0.5 mx-2 bg-slate-800 overflow-hidden rounded-full">
+                    <div className="w-12 sm:w-16 md:w-20 h-[3px] mx-3 sm:mx-4 bg-zinc-800/80 overflow-hidden rounded-full mt-[-10px]">
                       <div
-                        className={`h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ${
-                          isCompleted ? 'w-full' : 'w-0'
-                        }`}
+                        className={`h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000 ease-in-out ${isCompleted ? 'w-full' : 'w-0'
+                          }`}
                       />
                     </div>
                   )}
@@ -179,33 +178,35 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
 
       {/* Progress Bar */}
       {status !== 'completed' && status !== 'failed' && (
-        <div className="max-w-md mx-auto space-y-3">
-          <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden">
+        <div className="w-full space-y-4 pt-12">
+          <div className="relative h-2.5 bg-zinc-800/80 rounded-full overflow-hidden border border-white/5 shadow-inner">
             {/* Gradient Progress */}
             <div
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full transition-all duration-500 ease-out"
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full transition-all duration-1000 ease-out"
               style={{ width: `${progress}%` }}
             />
             {/* Shimmer Effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
           </div>
-          
+
           {/* Progress Text */}
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-400">Processing...</span>
-            <span className="text-white font-medium">{Math.round(progress)}%</span>
+          <div className="flex items-center justify-between text-sm px-1">
+            <span className="text-zinc-400 font-medium">Supercharging text...</span>
+            <span className="text-white font-bold tracking-wider">{Math.round(progress)}%</span>
           </div>
         </div>
       )}
 
       {/* Info Card */}
       {status !== 'completed' && status !== 'failed' && (
-        <div className="flex items-start gap-3 p-4 rounded-xl glass max-w-md mx-auto">
-          <Sparkles className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-4 p-5 rounded-2xl glass-dark border border-indigo-500/10 max-w-md mx-auto mt-8 animate-fade-in-up delay-200">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center flex-shrink-0 border border-indigo-500/20">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+          </div>
           <div>
-            <p className="text-sm text-slate-300 font-medium">AI at Work</p>
-            <p className="text-xs text-slate-500">
-              Our AI is analyzing your resume and optimizing it for maximum impact
+            <p className="text-[15px] text-zinc-200 font-bold tracking-tight mb-0.5">AI Engine Working</p>
+            <p className="text-[13px] text-zinc-400 font-medium leading-relaxed">
+              Our deeply trained AI models are fundamentally analyzing your resume and optimizing it for strict ATS requirements.
             </p>
           </div>
         </div>
@@ -213,3 +214,4 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
     </div>
   )
 }
+
