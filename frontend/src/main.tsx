@@ -8,10 +8,8 @@ import './index.css'
 
 const queryClient = new QueryClient()
 
-// Auth0 configuration
 const domain = import.meta.env.VITE_AUTH0_DOMAIN || ''
 const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID || ''
-const redirectUri = window.location.origin
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -19,11 +17,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       domain={domain}
       clientId={clientId}
       authorizationParams={{
-        redirect_uri: redirectUri,
-        audience: `https://${domain}/api/v2/`,
+        redirect_uri: window.location.origin,
         scope: 'openid profile email'
       }}
       cacheLocation="localstorage"
+      useRefreshTokens={true}
     >
       <QueryClientProvider client={queryClient}>
         <App />
