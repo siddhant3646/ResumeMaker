@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase } from 'lucide-react'
 import { generateResume, optimizeATS } from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -40,15 +40,12 @@ export default function JobDescStep({ resumeData, onGenerationStart, onBack }: J
           toast.error(response.message || 'Generation failed')
         }
       } else {
-        // ATS-only mode
         const response = await optimizeATS({
           resume_data: resumeData
         })
 
         if (response.success) {
           toast.success('Resume optimized for ATS!')
-          // In ATS mode, we get result immediately (no job queue)
-          // Handle completion differently
         }
       }
     } catch (error) {
@@ -61,109 +58,149 @@ export default function JobDescStep({ resumeData, onGenerationStart, onBack }: J
 
   return (
     <div className="space-y-6">
-      {/* Mode Selection */}
-      <div className="flex gap-4 mb-6">
+      {/* Header */}
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 mb-4">
+          <Briefcase className="w-7 h-7 text-purple-400" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Customize Your Resume</h2>
+        <p className="text-slate-400 max-w-md mx-auto">
+          Choose how you want to optimize your resume
+        </p>
+      </div>
+
+      {/* Mode Selection Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <button
           onClick={() => setMode('tailor')}
-          className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+          className={`group relative p-5 rounded-2xl text-left transition-all duration-300 ${
             mode === 'tailor'
-              ? 'border-blue-500 bg-blue-500/10'
-              : 'border-slate-700 hover:border-slate-600'
+              ? 'bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border-2 border-indigo-500/50 shadow-lg shadow-indigo-500/10'
+              : 'glass glass-hover border border-transparent'
           }`}
         >
-          <div className="text-2xl mb-2">🎯</div>
-          <h3 className="font-semibold text-white">Tailor for Specific Job</h3>
-          <p className="text-sm text-slate-400 mt-1">
+          {/* Selected Indicator */}
+          {mode === 'tailor' && (
+            <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <Check className="w-4 h-4 text-white" />
+            </div>
+          )}
+          
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <Target className="w-6 h-6 text-indigo-400" />
+          </div>
+          <h3 className="font-semibold text-white mb-1">Tailor for Job</h3>
+          <p className="text-sm text-slate-400">
             Optimize for a specific job description
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/10 text-indigo-400">Best Match</span>
+            <span className="text-xs px-2 py-1 rounded-full bg-purple-500/10 text-purple-400">Keywords</span>
+          </div>
         </button>
 
         <button
           onClick={() => setMode('ats')}
-          className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+          className={`group relative p-5 rounded-2xl text-left transition-all duration-300 ${
             mode === 'ats'
-              ? 'border-blue-500 bg-blue-500/10'
-              : 'border-slate-700 hover:border-slate-600'
+              ? 'bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-2 border-blue-500/50 shadow-lg shadow-blue-500/10'
+              : 'glass glass-hover border border-transparent'
           }`}
         >
-          <div className="text-2xl mb-2">⚡</div>
-          <h3 className="font-semibold text-white">ATS Optimization Only</h3>
-          <p className="text-sm text-slate-400 mt-1">
-            Improve existing content for ATS
+          {mode === 'ats' && (
+            <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
+              <Check className="w-4 h-4 text-white" />
+            </div>
+          )}
+          
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <Zap className="w-6 h-6 text-blue-400" />
+          </div>
+          <h3 className="font-semibold text-white mb-1">ATS Optimization</h3>
+          <p className="text-sm text-slate-400">
+            Quick optimization without job description
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="text-xs px-2 py-1 rounded-full bg-blue-500/10 text-blue-400">Fast</span>
+            <span className="text-xs px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-400">STAR Format</span>
+          </div>
         </button>
       </div>
 
       {/* Job Description Input (only for tailor mode) */}
       {mode === 'tailor' && (
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+        <div className="space-y-3 animate-fade-in">
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+            <Target className="w-4 h-4 text-indigo-400" />
             Job Description
           </label>
-          <textarea
-            value={jobDescription}
-            onChange={(e) => setJobDescription(e.target.value)}
-            placeholder="Paste the complete job description here..."
-            className="w-full h-48 p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
-          />
-          <p className="text-xs text-slate-500 mt-2">
-            Include all requirements, responsibilities, and qualifications
+          <div className="relative">
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              placeholder="Paste the complete job description here. Include requirements, responsibilities, and qualifications..."
+              className="w-full h-48 p-4 rounded-xl input-modern resize-none"
+            />
+            {/* Character Count */}
+            <div className="absolute bottom-3 right-3 text-xs text-slate-600">
+              {jobDescription.length} characters
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 flex items-center gap-2">
+            <span className="text-indigo-400">💡</span>
+            Tip: Include all requirements, skills, and responsibilities for best results
           </p>
         </div>
       )}
 
-      {/* ATS Mode Description */}
+      {/* ATS Mode Info */}
       {mode === 'ats' && (
-        <div className="p-4 bg-slate-800/50 rounded-xl">
-          <h3 className="font-semibold text-white mb-2">⚡ ATS-Only Optimization Mode</h3>
-          <ul className="space-y-2 text-sm text-slate-400">
-            <li className="flex items-start gap-2">
-              <span className="text-green-400">✓</span>
-              Rewrite existing bullets using STAR format
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-green-400">✓</span>
-              Add quantification and metrics
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-green-400">✓</span>
-              Use stronger action verbs
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-green-400">✓</span>
-              <strong>No new experience added</strong> - only improves existing content
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-green-400">✓</span>
-              Single pass generation (faster)
-            </li>
+        <div className="glass rounded-xl p-5 space-y-3 animate-fade-in">
+          <h3 className="font-semibold text-white flex items-center gap-2">
+            <Zap className="w-5 h-5 text-blue-400" />
+            ATS-Only Optimization
+          </h3>
+          <ul className="space-y-2">
+            {[
+              'Rewrite bullets using STAR format',
+              'Add quantification and metrics',
+              'Use stronger action verbs',
+              'No new experience added',
+              'Single pass generation (faster)'
+            ].map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-400">
+                <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
           </ul>
         </div>
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-4 pt-4">
+      <div className="flex gap-3 pt-4">
         <button
           onClick={onBack}
           disabled={isGenerating}
-          className="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl glass hover:bg-white/5 text-slate-300 font-medium transition-all duration-300 disabled:opacity-50"
         >
-          ← Back
+          <ArrowLeft className="w-4 h-4" />
+          Back
         </button>
 
         <button
           onClick={handleGenerate}
           disabled={isGenerating || (mode === 'tailor' && !jobDescription.trim())}
-          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5"
         >
           {isGenerating ? (
             <>
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="w-5 h-5 animate-spin" />
               Starting...
             </>
           ) : (
             <>
-              <Sparkles className="h-5 w-5" />
+              <Sparkles className="w-5 h-5" />
               {mode === 'tailor' ? 'Tailor Resume' : 'Optimize for ATS'}
             </>
           )}

@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { Loader2, LogOut, User } from 'lucide-react'
+import { Loader2, LogOut, User, FileText } from 'lucide-react'
 import { setAuthToken } from '../services/api'
 
 interface LayoutProps {
@@ -10,7 +10,6 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const { user, isLoading, logout, getAccessTokenSilently } = useAuth0()
 
-  // Get and set auth token
   const setupAuth = async () => {
     try {
       const token = await getAccessTokenSilently()
@@ -26,39 +25,72 @@ export default function Layout({ children }: LayoutProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      <div className="min-h-screen gradient-mesh flex items-center justify-center">
+        <div className="text-center animate-fade-in">
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 animate-spin-slow opacity-30"></div>
+            <div className="absolute inset-2 rounded-xl bg-slate-900 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+            </div>
+          </div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen gradient-mesh relative">
+      {/* Background Orbs */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl"></div>
+      </div>
+
       {/* Header */}
-      <header className="border-b border-slate-800/50 backdrop-blur-md bg-slate-950/50 sticky top-0 z-50">
+      <header className="sticky top-0 z-50 border-b border-white/5 backdrop-blur-xl bg-slate-900/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-                R
+            <div className="flex items-center gap-3">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl blur opacity-50 group-hover:opacity-75 transition-opacity"></div>
+                <div className="relative w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <FileText className="w-5 h-5 text-white" />
+                </div>
               </div>
-              <span className="text-xl font-bold gradient-text">ResumeMaker AI</span>
+              <div className="flex flex-col">
+                <span className="text-lg font-bold text-white">ResumeMaker</span>
+                <span className="text-xs text-indigo-400 -mt-0.5">AI Powered</span>
+              </div>
             </div>
 
             {/* User Menu */}
             {user && (
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2 text-slate-300">
-                  <User className="h-4 w-4" />
-                  <span className="text-sm hidden sm:inline">{user.name || user.email}</span>
+              <div className="flex items-center gap-3">
+                {/* User Info */}
+                <div className="hidden sm:flex items-center gap-3 px-4 py-2 rounded-xl glass">
+                  {user.picture ? (
+                    <img 
+                      src={user.picture} 
+                      alt={user.name || 'User'} 
+                      className="w-7 h-7 rounded-full ring-2 ring-indigo-500/30"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                      <User className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  <span className="text-sm text-slate-300 font-medium">{user.name || user.email}</span>
                 </div>
+
+                {/* Logout Button */}
                 <button
                   onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
-                  className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 text-sm transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 text-sm font-medium transition-all duration-300 hover:-translate-y-0.5"
                 >
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">Logout</span>
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
                 </button>
               </div>
             )}
@@ -67,15 +99,30 @@ export default function Layout({ children }: LayoutProps) {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/50 mt-auto py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
-          <p>🔒 Secure authentication powered by Auth0</p>
-          <p className="mt-1">We never store your resume data on our servers</p>
+      <footer className="relative z-10 border-t border-white/5 mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-6 text-sm text-slate-500">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span>All systems operational</span>
+              </div>
+              <span className="hidden md:inline">•</span>
+              <span className="hidden md:inline">Secure authentication by Auth0</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-slate-600">We never store your resume data</span>
+              <div className="flex items-center gap-1 text-xs text-slate-500">
+                <span>🔒</span>
+                <span>End-to-end encrypted</span>
+              </div>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
