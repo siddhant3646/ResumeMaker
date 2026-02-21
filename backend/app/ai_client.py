@@ -14,64 +14,63 @@ logger = logging.getLogger(__name__)
 
 
 def convert_core_to_app(core_resume: Any) -> Dict:
-    """Convert core.models TailoredResume to app.models format (as dict)"""
-    from app.models import Basics, Experience, Education, Skills, Project
+    """Convert core.models TailoredResume to plain dict for app.models"""
     
-    def convert_basics(basics_obj) -> Basics:
-        return Basics(
-            name=basics_obj.name,
-            email=basics_obj.email,
-            phone=getattr(basics_obj, 'phone', None),
-            location=getattr(basics_obj, 'location', None),
-            linkedin=None,
-            github=None,
-            website=None
-        )
+    def convert_basics(basics_obj) -> Dict:
+        return {
+            "name": basics_obj.name,
+            "email": basics_obj.email,
+            "phone": getattr(basics_obj, 'phone', None),
+            "location": getattr(basics_obj, 'location', None),
+            "linkedin": None,
+            "github": None,
+            "website": None
+        }
     
-    def convert_experience(exp_list):
+    def convert_experience(exp_list) -> list:
         result = []
         for exp in exp_list:
-            result.append(Experience(
-                company=exp.company,
-                role=exp.role,
-                startDate=exp.startDate if hasattr(exp, 'startDate') else '',
-                endDate=getattr(exp, 'endDate', None),
-                location=getattr(exp, 'location', None),
-                bullets=exp.bullets if exp.bullets else [],
-                is_fabricated=getattr(exp, 'is_fabricated', False)
-            ))
+            result.append({
+                "company": exp.company,
+                "role": exp.role,
+                "startDate": exp.startDate if hasattr(exp, 'startDate') else '',
+                "endDate": getattr(exp, 'endDate', None),
+                "location": getattr(exp, 'location', None),
+                "bullets": exp.bullets if exp.bullets else [],
+                "is_fabricated": getattr(exp, 'is_fabricated', False)
+            })
         return result
     
-    def convert_education(edu_list):
+    def convert_education(edu_list) -> list:
         result = []
         for edu in edu_list:
-            result.append(Education(
-                institution=edu.institution,
-                degree=getattr(edu, 'studyType', '') or getattr(edu, 'degree', ''),
-                field=getattr(edu, 'area', None),
-                location=getattr(edu, 'location', None),
-                graduationDate=getattr(edu, 'endDate', None),
-                gpa=None
-            ))
+            result.append({
+                "institution": edu.institution,
+                "degree": getattr(edu, 'studyType', '') or getattr(edu, 'degree', ''),
+                "field": getattr(edu, 'area', None),
+                "location": getattr(edu, 'location', None),
+                "graduationDate": getattr(edu, 'endDate', None),
+                "gpa": None
+            })
         return result
     
-    def convert_skills(skills_obj):
-        return Skills(
-            languages_frameworks=skills_obj.languages_frameworks if skills_obj and skills_obj.languages_frameworks else [],
-            tools=skills_obj.tools if skills_obj and skills_obj.tools else [],
-            methodologies=[]
-        )
+    def convert_skills(skills_obj) -> Dict:
+        return {
+            "languages_frameworks": skills_obj.languages_frameworks if skills_obj and skills_obj.languages_frameworks else [],
+            "tools": skills_obj.tools if skills_obj and skills_obj.tools else [],
+            "methodologies": []
+        }
     
-    def convert_projects(proj_list):
+    def convert_projects(proj_list) -> list:
         result = []
         for proj in proj_list:
             tech = getattr(proj, 'techStack', '') or ''
-            result.append(Project(
-                name=proj.name,
-                description=getattr(proj, 'description', ''),
-                technologies=tech.split(', ') if tech else [],
-                link=None
-            ))
+            result.append({
+                "name": proj.name,
+                "description": getattr(proj, 'description', ''),
+                "technologies": tech.split(', ') if tech else [],
+                "link": None
+            })
         return result
     
     ats_score_dict = None
