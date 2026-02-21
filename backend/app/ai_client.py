@@ -547,7 +547,7 @@ IMPROVED TEXT:"""
         )
 
         target_score = 93
-        max_attempts = 5  # capped: diminishing returns beyond 5
+        max_attempts = 2  # capped at 2 to prevent Render 100s proxy timeout
         best_tailored = None
         best_score = 0.0
         previous_ats_feedback = None
