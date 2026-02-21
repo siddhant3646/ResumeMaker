@@ -68,9 +68,10 @@ app.add_middleware(
         FRONTEND_URL, 
         "http://localhost:5173", 
         "http://localhost:3000",
-        "https://resume-maker2-one.vercel.app"
+        "https://resume-maker2-one.vercel.app",
+        "https://resume-maker1-rust.vercel.app"
     ],
-    allow_origin_regex="https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
