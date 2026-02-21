@@ -279,7 +279,7 @@ Please rewrite this resume to match the job description."""
             "progress": job["progress"],
             "message": job["message"],
             "stream_text": job.get("stream_text", ""),
-            "result": job.get("result"),
+            "result": job.get("result").model_dump() if hasattr(job.get("result"), "model_dump") else job.get("result"),
             "error": job.get("error"),
             "created_at": job["created_at"].isoformat(),
             "updated_at": job["updated_at"].isoformat()
