@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase } from 'lucide-react'
-import { generateResume, optimizeATS, healthCheck } from '../services/api'
+import { generateResume, optimizeATS } from '../services/api'
 import toast from 'react-hot-toast'
 
 interface JobDescStepProps {
@@ -24,15 +24,6 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
     setIsGenerating(true)
 
     try {
-      // Wake the Render free-tier server before the long generate call.
-      // If it's sleeping the health-check takes ~15-30 s to respond.
-      try {
-        const warmToast = toast.loading('Connecting to AI server...', { style: { borderRadius: '12px' } })
-        await healthCheck()
-        toast.dismiss(warmToast)
-      } catch {
-        // Server may still be starting — proceed anyway; generate has its own retry logic.
-      }
       if (mode === 'tailor') {
         const response = await generateResume({
           resume_data: resumeData,
