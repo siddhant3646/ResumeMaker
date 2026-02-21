@@ -257,12 +257,15 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
     try:
         while True:
             # Keep connection alive and send updates
+            import asyncio
             data = await ai_client.get_progress_update(job_id)
             await ws_manager.send_update(job_id, data)
             
             # Check if generation is complete
             if data.get("status") in ["completed", "failed"]:
                 break
+                
+            await asyncio.sleep(1)
                 
     except Exception as e:
         logger.error(f"WebSocket error: {e}")

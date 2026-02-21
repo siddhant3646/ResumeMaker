@@ -173,7 +173,8 @@ Please rewrite this resume to match the job description."""
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(
+                async with client.stream(
+                    "POST",
                     "https://integrate.api.nvidia.com/v1/chat/completions",
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
@@ -186,16 +187,25 @@ Please rewrite this resume to match the job description."""
                             {"role": "user", "content": user_prompt}
                         ],
                         "temperature": 0.3,
-                        "max_tokens": 4096
+                        "max_tokens": 4096,
+                        "stream": True
                     },
                     timeout=60.0
-                )
-                
-                response.raise_for_status()
-                result = response.json()
-                
-                # Extract content from Mistral response
-                content = result["choices"][0]["message"]["content"]
+                ) as response:
+                    response.raise_for_status()
+                    content = ""
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                delta = chunk["choices"][0]["delta"].get("content", "")
+                                content += delta
+                                job["stream_text"] = content[-80:].replace("\n", " ")
+                            except Exception:
+                                pass
                 
                 # Parse JSON from response
                 try:
@@ -264,6 +274,7 @@ Please rewrite this resume to match the job description."""
             "status": job["status"],
             "progress": job["progress"],
             "message": job["message"],
+            "stream_text": job.get("stream_text", ""),
             "result": job.get("result"),
             "error": job.get("error"),
             "created_at": job["created_at"].isoformat(),

@@ -18,6 +18,7 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('pending')
   const [message, setMessage] = useState('Initializing optimization sequence...')
+  const [streamText, setStreamText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
@@ -35,6 +36,9 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
         setProgress(data.progress)
         setStatus(data.status)
         setMessage(data.message)
+        if (data.stream_text) {
+          setStreamText(data.stream_text)
+        }
 
         if (data.status === 'completed') {
           toast.success('Resume optimized successfully!', { style: { borderRadius: '12px', background: '#059669', color: '#fff' } })
@@ -115,16 +119,27 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
             </button>
           </div>
         ) : (
-          <div className="animate-fade-in">
-            <div className="relative w-24 h-24 mx-auto mb-8 drop-shadow-xl">
-              {/* Spinning Background */}
-              <div className="absolute inset-0 rounded-[1.5rem] bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 animate-[spin_4s_linear_infinite] opacity-60 mix-blend-screen"></div>
-              {/* Inner Container */}
-              <div className="absolute inset-[3px] rounded-[1.3rem] bg-zinc-950 flex items-center justify-center shadow-inner">
-                <Loader2 className="w-10 h-10 animate-spin text-indigo-400 drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+          <div className="animate-fade-in flex flex-col items-center">
+            {/* Premium Apple-inspired Radar Animation */}
+            <div className="relative w-32 h-32 mb-10 mt-4 flex items-center justify-center">
+              {/* Outer pulsing rings */}
+              <div className="absolute inset-0 rounded-full border border-indigo-500/20 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
+              <div className="absolute inset-2 rounded-full border border-purple-500/30 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite] animation-delay-700"></div>
+              <div className="absolute inset-6 rounded-full border border-pink-500/40 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite] animation-delay-1000"></div>
+
+              {/* Spinning radar sweep */}
+              <div className="absolute inset-0 rounded-full overflow-hidden mask-radial-gradient">
+                <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent_0deg,transparent_270deg,rgba(99,102,241,0.4)_360deg)] animate-[spin_2s_linear_infinite]"></div>
+              </div>
+
+              {/* Central glowing core */}
+              <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.6)]">
+                <Sparkles className="w-5 h-5 text-white animate-pulse" />
+                <div className="absolute inset-0 rounded-full bg-white/20 animate-ping"></div>
               </div>
             </div>
-            <h2 className="text-3xl font-extrabold text-white tracking-tight mb-3">Optimizing Your Resume</h2>
+
+            <h2 className="text-3xl font-bold text-white tracking-tight mb-3">Optimizing Your Resume</h2>
             <p className="text-zinc-400 font-medium h-6 text-[15px]">{message}</p>
           </div>
         )}
@@ -144,10 +159,10 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
                   <div className="flex flex-col items-center">
                     <div
                       className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-700 ease-out ${isCompleted
-                          ? 'bg-gradient-to-br from-emerald-400 to-teal-500 shadow-[0_5px_20px_rgba(52,211,153,0.3)] scale-100'
-                          : isActive
-                            ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-[0_5px_20px_rgba(99,102,241,0.4)] scale-110 mb-1'
-                            : 'glass-dark'
+                        ? 'bg-gradient-to-br from-emerald-400 to-teal-500 shadow-[0_5px_20px_rgba(52,211,153,0.3)] scale-100'
+                        : isActive
+                          ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-[0_5px_20px_rgba(99,102,241,0.4)] scale-110 mb-1'
+                          : 'glass-dark'
                         }`}
                     >
                       {isCompleted ? (
@@ -190,9 +205,11 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
           </div>
 
           {/* Progress Text */}
-          <div className="flex items-center justify-between text-sm px-1">
-            <span className="text-zinc-400 font-medium">Supercharging text...</span>
-            <span className="text-white font-bold tracking-wider">{Math.round(progress)}%</span>
+          <div className="flex items-center justify-between text-sm px-1 overflow-hidden">
+            <span className="text-zinc-400 font-medium font-mono text-xs truncate max-w-[250px] opacity-70">
+              {streamText || "Supercharging text..."}
+            </span>
+            <span className="text-white font-bold tracking-wider flex-shrink-0">{Math.round(progress)}%</span>
           </div>
         </div>
       )}
