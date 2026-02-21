@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase } from 'lucide-react'
-import { generateResume, optimizeATS } from '../services/api'
+import { generateResume, retryGeneration, optimizeATS } from '../services/api'
 import toast from 'react-hot-toast'
+
+const TARGET_ATS_SCORE = 92
+const MAX_RETRIES = 2 // initial + 2 retries = 3 total attempts
 
 interface JobDescStepProps {
   resumeData: any
@@ -14,6 +17,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
   const [jobDescription, setJobDescription] = useState('')
   const [mode, setMode] = useState<'tailor' | 'ats'>('tailor')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [genStatus, setGenStatus] = useState('')
 
   const handleGenerate = async () => {
     if (mode === 'tailor' && !jobDescription.trim()) {
@@ -25,6 +29,8 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
 
     try {
       if (mode === 'tailor') {
+        // --- Initial generation ---
+        setGenStatus('Generating resume (attempt 1)…')
         const response = await generateResume({
           resume_data: resumeData,
           job_description: jobDescription,
@@ -34,14 +40,57 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
           }
         })
 
-        if (response.success && response.tailored_resume) {
-          localStorage.setItem('tailored_resume', JSON.stringify(response.tailored_resume))
-          toast.success('Resume optimized successfully!')
-          onGenerationComplete(response.tailored_resume)
-        } else {
+        if (!response.success || !response.tailored_resume) {
           toast.error(response.message || 'Generation failed')
+          return
         }
+
+        let bestResult = response.tailored_resume
+        let bestScore = response.ats_score ?? 0
+        let jobAnalysis = response.job_analysis
+
+        toast.success(`Attempt 1: ATS Score ${bestScore.toFixed(0)}`, { duration: 3000 })
+
+        // --- Client-driven retry loop ---
+        for (let retry = 1; retry <= MAX_RETRIES; retry++) {
+          if (bestScore >= TARGET_ATS_SCORE) break
+
+          setGenStatus(`Improving resume (attempt ${retry + 1}, current: ${bestScore.toFixed(0)})…`)
+          try {
+            const retryResp = await retryGeneration({
+              resume_data: resumeData,
+              previous_result: bestResult,
+              job_analysis: jobAnalysis,
+              job_description: jobDescription,
+              retry_count: retry,
+              config: {
+                generation_mode: 'tailor_with_jd',
+                fabrication_enabled: true
+              }
+            })
+
+            if (retryResp.success && retryResp.tailored_resume) {
+              const newScore = retryResp.ats_score ?? 0
+              toast.success(`Attempt ${retry + 1}: ATS Score ${newScore.toFixed(0)}`, { duration: 3000 })
+
+              if (newScore > bestScore) {
+                bestResult = retryResp.tailored_resume
+                bestScore = newScore
+                jobAnalysis = retryResp.job_analysis
+              }
+            }
+          } catch (retryErr) {
+            console.error(`Retry ${retry} failed:`, retryErr)
+            // Continue with best result so far
+            break
+          }
+        }
+
+        localStorage.setItem('tailored_resume', JSON.stringify(bestResult))
+        toast.success(`Resume optimized! Final ATS Score: ${bestScore.toFixed(0)}`)
+        onGenerationComplete(bestResult)
       } else {
+        setGenStatus('Optimizing for ATS…')
         const response = await optimizeATS({
           resume_data: resumeData
         })
@@ -56,6 +105,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
       toast.error('Failed to generate resume. Please try again.')
     } finally {
       setIsGenerating(false)
+      setGenStatus('')
     }
   }
 
@@ -197,7 +247,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
           {isGenerating ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Optimizing Resume...
+              {genStatus || 'Optimizing Resume...'}
             </>
           ) : (
             <>

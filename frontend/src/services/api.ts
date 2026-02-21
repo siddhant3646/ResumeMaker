@@ -94,6 +94,20 @@ export const generateResume = async (data: {
   }
 }
 
+export const retryGeneration = async (data: {
+  resume_data: any
+  previous_result: any
+  job_analysis: any
+  job_description: string
+  retry_count: number
+  config?: any
+}) => {
+  const response = await api.post('/api/resume/retry', data, {
+    timeout: 180_000,
+  })
+  return response.data
+}
+
 export const optimizeATS = async (data: { resume_data: any }) => {
   const response = await api.post('/api/resume/optimize-ats', data)
   return response.data

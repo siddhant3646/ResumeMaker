@@ -19,7 +19,7 @@ import logging
 from app.models import (
     HealthResponse, ResumeUploadResponse, JobDescriptionRequest,
     GenerationRequest, GenerationResponse, GenerationStatus,
-    TailoredResume, UserInfo
+    TailoredResume, UserInfo, RetryRequest
 )
 from pydantic import BaseModel
 from app.auth import verify_token, get_current_user
@@ -188,11 +188,12 @@ async def generate_resume(
 
         return GenerationResponse(
             success=True,
-            job_id="sync",  # sentinel; frontend no longer polls
+            job_id="sync",
             message=f"Resume generated! ATS Score: {result.get('ats_score', 0):.0f}",
             status=GenerationStatus.COMPLETED,
             tailored_resume=result.get("tailored_resume"),
-            ats_score=result.get("ats_score")
+            ats_score=result.get("ats_score"),
+            job_analysis=result.get("job_analysis"),
         )
 
     except HTTPException:
@@ -202,6 +203,48 @@ async def generate_resume(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating resume: {str(e)}"
+        )
+
+
+@app.post("/api/resume/retry", response_model=GenerationResponse)
+async def retry_generation(
+    request: RetryRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """One improvement pass using ATS feedback from the previous attempt."""
+    try:
+        if not NVIDIA_API_KEY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service not configured"
+            )
+
+        result = await ai_client.retry_sync(
+            resume_data=request.resume_data,
+            previous_result=request.previous_result,
+            job_analysis_dict=request.job_analysis,
+            job_description=request.job_description,
+            config=request.config,
+            retry_count=request.retry_count,
+        )
+
+        return GenerationResponse(
+            success=True,
+            job_id="sync",
+            message=f"Retry {request.retry_count}: ATS Score: {result.get('ats_score', 0):.0f}",
+            status=GenerationStatus.COMPLETED,
+            tailored_resume=result.get("tailored_resume"),
+            ats_score=result.get("ats_score"),
+            job_analysis=result.get("job_analysis"),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrying generation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrying generation: {str(e)}"
         )
 
 

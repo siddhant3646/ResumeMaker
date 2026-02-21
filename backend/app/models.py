@@ -153,6 +153,15 @@ class GenerationResponse(BaseModel):
     status: GenerationStatus
     tailored_resume: Optional[Dict[str, Any]] = None
     ats_score: Optional[float] = None
+    job_analysis: Optional[Dict[str, Any]] = None
+
+class RetryRequest(BaseModel):
+    resume_data: ParsedResume
+    previous_result: Dict[str, Any]
+    job_analysis: Dict[str, Any]
+    job_description: str
+    retry_count: int = 1
+    config: GenerationConfig = Field(default_factory=GenerationConfig)
 
 class GenerationStatusResponse(BaseModel):
     job_id: str

@@ -522,12 +522,8 @@ IMPROVED TEXT:"""
         config: Any,
         user_id: str,
     ) -> Dict:
-        """Run the full generation + retry loop synchronously and return the result dict.
-
-        This replaces the fire-and-forget + polling pattern.  The caller awaits this
-        coroutine; the HTTP response is sent only once generation is complete.
-        Returns a dict with keys ``tailored_resume`` and ``ats_score``.
-        """
+        """Single-pass generation.  Returns tailored_resume, ats_score, and
+        job_analysis (serialised) so the frontend can drive retries."""
         from intelligence.content_generator import ContentGenerator
         from core.models import GenerationConfig as CoreGenConfig
         from core.models import GenerationMode
@@ -545,7 +541,6 @@ IMPROVED TEXT:"""
             page_match_mode="optimize",
         )
 
-        # Single attempt only — Render free tier (512MB) gets OOM-killed during retries.
         tailored, job_analysis = content_gen.generate_tailored_resume(
             core_resume, job_description, core_config
         )
@@ -554,7 +549,89 @@ IMPROVED TEXT:"""
         logger.info(f"[sync] ATS Score = {ats_score}")
 
         result_dict = convert_core_to_app(tailored) if tailored else None
-        return {"tailored_resume": result_dict, "ats_score": ats_score}
+        return {
+            "tailored_resume": result_dict,
+            "ats_score": ats_score,
+            "job_analysis": job_analysis.model_dump() if job_analysis else None,
+        }
+
+    async def retry_sync(
+        self,
+        resume_data: Any,
+        previous_result: Dict,
+        job_analysis_dict: Dict,
+        job_description: str,
+        config: Any,
+        retry_count: int,
+    ) -> Dict:
+        """One improvement pass using ATS feedback from the previous attempt.
+
+        Runs regenerate_with_feedback once and returns the improved result.
+        Each call is a standalone HTTP request so memory is freed between
+        retries — no OOM on Render free tier.
+        """
+        from intelligence.content_generator import ContentGenerator
+        from core.models import (
+            GenerationConfig as CoreGenConfig,
+            GenerationMode,
+            JobAnalysis,
+            TailoredResume,
+        )
+
+        if not self.api_key:
+            raise ValueError("NVIDIA_API_KEY not configured")
+
+        core_resume = convert_app_to_core(resume_data)
+        content_gen = ContentGenerator(self.api_key, self.api_key)
+
+        core_config = CoreGenConfig(
+            generation_mode=GenerationMode.TAILOR_WITH_JD if job_description else GenerationMode.ATS_OPTIMIZE_ONLY,
+            fabrication_enabled=getattr(config, "fabrication_enabled", True),
+            target_ats_score=getattr(config, "target_ats_score", 92),
+            page_match_mode="optimize",
+        )
+
+        # Reconstruct core models from the dicts the frontend sent back
+        previous_core = convert_app_to_core(previous_result)
+        job_analysis = JobAnalysis(**job_analysis_dict)
+
+        # Build a minimal TailoredResume from the previous result so
+        # regenerate_with_feedback can read its bullets and ATS score.
+        prev_tailored, _ = content_gen.generate_tailored_resume(
+            previous_core, job_description, core_config
+        )
+        # Use the *actual* previous ATS score for feedback
+        ats_feedback = prev_tailored.ats_score if prev_tailored else None
+
+        if not ats_feedback:
+            # Fallback: just return the previous result unchanged
+            result_dict = convert_core_to_app(prev_tailored) if prev_tailored else previous_result
+            score = prev_tailored.ats_score.overall if prev_tailored and prev_tailored.ats_score else 0.0
+            return {
+                "tailored_resume": result_dict,
+                "ats_score": score,
+                "job_analysis": job_analysis_dict,
+            }
+
+        improved = content_gen.regenerate_with_feedback(
+            previous_resume=prev_tailored,
+            original_resume=core_resume,
+            job_analysis=job_analysis,
+            ats_feedback=ats_feedback,
+            config=core_config,
+            retry_count=retry_count,
+        )
+
+        new_score = improved.ats_score.overall if improved and improved.ats_score else 0.0
+        logger.info(f"[retry {retry_count}] ATS Score = {new_score}")
+
+        result_dict = convert_core_to_app(improved) if improved else previous_result
+        return {
+            "tailored_resume": result_dict,
+            "ats_score": new_score,
+            "job_analysis": job_analysis_dict,
+        }
+
 
     async def get_job_status(self, job_id: str) -> Dict:
         """Get job status and result"""
