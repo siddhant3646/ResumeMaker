@@ -4,7 +4,7 @@ services:
     name: resumemaker-api
     runtime: docker
     repo: https://github.com/siddhant3646/ResumeMaker
-    branch: feature/react-fastapi-migration
+    branch: main
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     envVars:
