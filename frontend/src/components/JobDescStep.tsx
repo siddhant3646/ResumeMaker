@@ -6,10 +6,11 @@ import toast from 'react-hot-toast'
 interface JobDescStepProps {
   resumeData: any
   onGenerationStart: (jobId: string) => void
+  onAtsComplete: (tailoredResume: any) => void
   onBack: () => void
 }
 
-export default function JobDescStep({ resumeData, onGenerationStart, onBack }: JobDescStepProps) {
+export default function JobDescStep({ resumeData, onGenerationStart, onAtsComplete, onBack }: JobDescStepProps) {
   const [jobDescription, setJobDescription] = useState('')
   const [mode, setMode] = useState<'tailor' | 'ats'>('tailor')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -46,6 +47,7 @@ export default function JobDescStep({ resumeData, onGenerationStart, onBack }: J
 
         if (response.success) {
           toast.success('Resume optimized for ATS!')
+          onAtsComplete(response.tailored_resume)
         }
       }
     } catch (error) {
@@ -74,8 +76,8 @@ export default function JobDescStep({ resumeData, onGenerationStart, onBack }: J
         <button
           onClick={() => setMode('tailor')}
           className={`group relative p-6 rounded-3xl text-left transition-all duration-300 ${mode === 'tailor'
-              ? 'glass-dark border-[1.5px] border-indigo-500/50 shadow-[0_8px_30px_rgba(99,102,241,0.2)] scale-[1.02]'
-              : 'glass-dark border border-white/5 hover:border-white/10 hover:bg-white/[0.04]'
+            ? 'glass-dark border-[1.5px] border-indigo-500/50 shadow-[0_8px_30px_rgba(99,102,241,0.2)] scale-[1.02]'
+            : 'glass-dark border border-white/5 hover:border-white/10 hover:bg-white/[0.04]'
             }`}
         >
           {/* Selected Indicator */}
@@ -101,8 +103,8 @@ export default function JobDescStep({ resumeData, onGenerationStart, onBack }: J
         <button
           onClick={() => setMode('ats')}
           className={`group relative p-6 rounded-3xl text-left transition-all duration-300 ${mode === 'ats'
-              ? 'glass-dark border-[1.5px] border-blue-500/50 shadow-[0_8px_30px_rgba(59,130,246,0.2)] scale-[1.02]'
-              : 'glass-dark border border-white/5 hover:border-white/10 hover:bg-white/[0.04]'
+            ? 'glass-dark border-[1.5px] border-blue-500/50 shadow-[0_8px_30px_rgba(59,130,246,0.2)] scale-[1.02]'
+            : 'glass-dark border border-white/5 hover:border-white/10 hover:bg-white/[0.04]'
             }`}
         >
           {mode === 'ats' && (

@@ -94,10 +94,10 @@ export default function Home() {
                   <div className="flex flex-col items-center">
                     <div
                       className={`relative w-16 h-16 rounded-[1.25rem] flex items-center justify-center transition-all duration-500 ${isActive
-                          ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-[0_8px_30px_rgba(99,102,241,0.3)] scale-110 text-white'
-                          : isCompleted
-                            ? 'bg-gradient-to-br from-emerald-400 to-teal-500 shadow-[0_8px_30px_rgba(52,211,153,0.3)] text-white'
-                            : 'glass text-zinc-400'
+                        ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-[0_8px_30px_rgba(99,102,241,0.3)] scale-110 text-white'
+                        : isCompleted
+                          ? 'bg-gradient-to-br from-emerald-400 to-teal-500 shadow-[0_8px_30px_rgba(52,211,153,0.3)] text-white'
+                          : 'glass text-zinc-400'
                         }`}
                     >
                       {/* Pulse Animation for Active */}
@@ -147,6 +147,11 @@ export default function Home() {
               <JobDescStep
                 resumeData={resumeData}
                 onGenerationStart={handleGenerationStart}
+                onAtsComplete={(tailoredResume) => {
+                  // Save the result directly and navigate to editor
+                  localStorage.setItem('tailored_resume', JSON.stringify(tailoredResume))
+                  navigate('/editor')
+                }}
                 onBack={() => setCurrentStep(1)}
               />
             )}
