@@ -545,44 +545,16 @@ IMPROVED TEXT:"""
             page_match_mode="optimize",
         )
 
-        target_score = getattr(config, "target_ats_score", 92)
-        best_tailored = None
-        best_score = 0.0
-        previous_ats_feedback = None
-        job_analysis = None
+        # Single attempt only — Render free tier (512MB) gets OOM-killed during retries.
+        tailored, job_analysis = content_gen.generate_tailored_resume(
+            core_resume, job_description, core_config
+        )
 
-        for attempt in range(1, self.MAX_ATTEMPTS + 1):
-            if attempt == 1:
-                tailored, job_analysis = content_gen.generate_tailored_resume(
-                    core_resume, job_description, core_config
-                )
-            else:
-                if best_tailored and previous_ats_feedback and job_analysis:
-                    tailored = content_gen.regenerate_with_feedback(
-                        previous_resume=best_tailored,
-                        original_resume=core_resume,
-                        job_analysis=job_analysis,
-                        ats_feedback=previous_ats_feedback,
-                        config=core_config,
-                        retry_count=attempt,
-                    )
-                else:
-                    tailored = best_tailored
+        ats_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0.0
+        logger.info(f"[sync] ATS Score = {ats_score}")
 
-            ats_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0.0
-            logger.info(f"[sync] Attempt {attempt}: ATS Score = {ats_score}")
-
-            if ats_score > best_score:
-                best_score = ats_score
-                best_tailored = tailored
-
-            if ats_score >= target_score:
-                break
-
-            previous_ats_feedback = tailored.ats_score if tailored else None
-
-        result_dict = convert_core_to_app(best_tailored) if best_tailored else None
-        return {"tailored_resume": result_dict, "ats_score": best_score}
+        result_dict = convert_core_to_app(tailored) if tailored else None
+        return {"tailored_resume": result_dict, "ats_score": ats_score}
 
     async def get_job_status(self, job_id: str) -> Dict:
         """Get job status and result"""
