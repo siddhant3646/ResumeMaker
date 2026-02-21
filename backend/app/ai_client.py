@@ -8,8 +8,96 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
+from copy import deepcopy
 
 logger = logging.getLogger(__name__)
+
+
+def convert_core_to_app(core_resume: Any) -> Dict:
+    """Convert core.models TailoredResume to app.models format (as dict)"""
+    from app.models import Basics, Experience, Education, Skills, Project
+    
+    def convert_basics(basics_obj) -> Basics:
+        return Basics(
+            name=basics_obj.name,
+            email=basics_obj.email,
+            phone=getattr(basics_obj, 'phone', None),
+            location=getattr(basics_obj, 'location', None),
+            linkedin=None,
+            github=None,
+            website=None
+        )
+    
+    def convert_experience(exp_list):
+        result = []
+        for exp in exp_list:
+            result.append(Experience(
+                company=exp.company,
+                role=exp.role,
+                startDate=exp.startDate if hasattr(exp, 'startDate') else '',
+                endDate=getattr(exp, 'endDate', None),
+                location=getattr(exp, 'location', None),
+                bullets=exp.bullets if exp.bullets else [],
+                is_fabricated=getattr(exp, 'is_fabricated', False)
+            ))
+        return result
+    
+    def convert_education(edu_list):
+        result = []
+        for edu in edu_list:
+            result.append(Education(
+                institution=edu.institution,
+                degree=getattr(edu, 'studyType', '') or getattr(edu, 'degree', ''),
+                field=getattr(edu, 'area', None),
+                location=getattr(edu, 'location', None),
+                graduationDate=getattr(edu, 'endDate', None),
+                gpa=None
+            ))
+        return result
+    
+    def convert_skills(skills_obj):
+        return Skills(
+            languages_frameworks=skills_obj.languages_frameworks if skills_obj and skills_obj.languages_frameworks else [],
+            tools=skills_obj.tools if skills_obj and skills_obj.tools else [],
+            methodologies=[]
+        )
+    
+    def convert_projects(proj_list):
+        result = []
+        for proj in proj_list:
+            tech = getattr(proj, 'techStack', '') or ''
+            result.append(Project(
+                name=proj.name,
+                description=getattr(proj, 'description', ''),
+                technologies=tech.split(', ') if tech else [],
+                link=None
+            ))
+        return result
+    
+    ats_score_dict = None
+    if hasattr(core_resume, 'ats_score') and core_resume.ats_score:
+        ats = core_resume.ats_score
+        ats_score_dict = {
+            "overall": getattr(ats, 'overall', 90),
+            "keyword_match": getattr(ats, 'keyword_match', 90),
+            "star_compliance": getattr(ats, 'star_compliance', 90),
+            "quantification": getattr(ats, 'quantification', 90),
+            "action_verb_strength": getattr(ats, 'action_verb_strength', 90)
+        }
+    
+    fabrication_notes = getattr(core_resume, 'fabrication_notes', []) or []
+    
+    return {
+        "basics": convert_basics(core_resume.basics),
+        "summary": getattr(core_resume, 'summary', None),
+        "experience": convert_experience(core_resume.experience),
+        "education": convert_education(getattr(core_resume, 'education', [])),
+        "skills": convert_skills(getattr(core_resume, 'skills', None)),
+        "projects": convert_projects(getattr(core_resume, 'projects', [])),
+        "achievements": getattr(core_resume, 'achievements', []) or [],
+        "ats_score": ats_score_dict,
+        "fabrication_notes": fabrication_notes
+    }
 
 class AIClient:
     """Kimi K2.5 AI client with job queue management and retry logic"""
@@ -135,7 +223,7 @@ class AIClient:
                     job["progress"] = 100.0
                     job["message"] = f"Completed! ATS Score: {ats_score}"
                     job["stream_text"] = f"Resume optimized with {ats_score}% ATS score"
-                    job["result"] = best_tailored
+                    job["result"] = convert_core_to_app(best_tailored) if best_tailored else None
                     job["updated_at"] = datetime.now()
                     return
                 
@@ -147,7 +235,7 @@ class AIClient:
             job["progress"] = 100.0
             job["message"] = f"Completed with best score: {best_score}"
             job["stream_text"] = f"Resume generated - Best ATS: {best_score}%"
-            job["result"] = best_tailored
+            job["result"] = convert_core_to_app(best_tailored) if best_tailored else None
             job["ats_score"] = best_score
             job["updated_at"] = datetime.now()
             
@@ -184,7 +272,7 @@ class AIClient:
             
             tailored, job_analysis = content_gen.optimize_for_ats_only(resume_data, config)
             
-            return tailored
+            return convert_core_to_app(tailored) if tailored else None
             
         except Exception as e:
             logger.error(f"ATS optimization failed: {e}", exc_info=True)
