@@ -2,6 +2,11 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
+// DEBUG-TEMP: log resolved API base URL
+console.log('[DEBUG] VITE_API_URL env:', JSON.stringify(import.meta.env.VITE_API_URL))
+console.log('[DEBUG] Resolved API_URL:', JSON.stringify(API_URL))
+console.log('[DEBUG] window.location.origin:', window.location.origin)
+
 // Create axios instance
 const api = axios.create({
   baseURL: API_URL,
@@ -9,6 +14,32 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+// DEBUG-TEMP: request interceptor
+api.interceptors.request.use((config) => {
+  const fullUrl = (config.baseURL || '') + (config.url || '')
+  console.log(`[DEBUG] REQUEST ${config.method?.toUpperCase()} ${fullUrl}`)
+  return config
+})
+
+// DEBUG-TEMP: response interceptor
+api.interceptors.response.use(
+  (response) => {
+    console.log(`[DEBUG] RESPONSE ${response.status} ${response.config.url}`)
+    return response
+  },
+  (error) => {
+    console.error('[DEBUG] RESPONSE ERROR', {
+      url: error.config?.url,
+      baseURL: error.config?.baseURL,
+      fullURL: (error.config?.baseURL || '') + (error.config?.url || ''),
+      status: error.response?.status,
+      message: error.message,
+      code: error.code,
+    })
+    return Promise.reject(error)
+  }
+)
 
 // Add auth token to requests
 export const setAuthToken = (token: string) => {
@@ -44,10 +75,23 @@ export const generateResume = async (data: {
   job_description: string
   config?: any
 }) => {
-  const response = await api.post('/api/resume/generate', data, {
-    timeout: 180_000, // 3 minutes — generation is synchronous and can take 60-120 s
-  })
-  return response.data
+  console.log('[DEBUG] generateResume called, baseURL:', api.defaults.baseURL) // DEBUG-TEMP
+  try {
+    const response = await api.post('/api/resume/generate', data, {
+      timeout: 180_000, // 3 minutes — generation is synchronous and can take 60-120 s
+    })
+    console.log('[DEBUG] generateResume success:', response.status) // DEBUG-TEMP
+    return response.data
+  } catch (err: any) {
+    console.error('[DEBUG] generateResume FAILED:', { // DEBUG-TEMP
+      message: err.message,
+      code: err.code,
+      responseStatus: err.response?.status,
+      responseData: err.response?.data,
+      requestURL: err.config?.baseURL + err.config?.url,
+    })
+    throw err
+  }
 }
 
 export const optimizeATS = async (data: { resume_data: any }) => {
