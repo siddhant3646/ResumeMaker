@@ -30,7 +30,7 @@ export const healthCheck = async () => {
 export const uploadResume = async (file: File) => {
   const formData = new FormData()
   formData.append('file', file)
-  
+
   const response = await api.post('/api/resume/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
@@ -44,7 +44,9 @@ export const generateResume = async (data: {
   job_description: string
   config?: any
 }) => {
-  const response = await api.post('/api/resume/generate', data)
+  const response = await api.post('/api/resume/generate', data, {
+    timeout: 180_000, // 3 minutes — generation is synchronous and can take 60-120 s
+  })
   return response.data
 }
 
