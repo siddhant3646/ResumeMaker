@@ -1,10 +1,23 @@
-import { useState } from 'react'
-import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase, Brain, FileText, BarChart3 } from 'lucide-react'
 import { generateResume, retryGeneration, optimizeATS } from '../services/api'
 import toast from 'react-hot-toast'
 
 const TARGET_ATS_SCORE = 92
-const MAX_RETRIES = 9 // initial + 9 retries = 10 total attempts
+const MAX_RETRIES = 9
+
+const STATUS_MESSAGES = [
+  'Analyzing job description keywords…',
+  'Matching your experience to requirements…',
+  'Enhancing bullet points with metrics…',
+  'Optimizing keyword density…',
+  'Applying STAR format improvements…',
+  'Fine-tuning skills alignment…',
+  'Polishing professional summary…',
+  'Running ATS compatibility check…',
+  'Maximizing relevance score…',
+  'Finalizing optimizations…',
+]
 
 interface JobDescStepProps {
   resumeData: any
@@ -18,6 +31,23 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
   const [mode, setMode] = useState<'tailor' | 'ats'>('tailor')
   const [isGenerating, setIsGenerating] = useState(false)
   const [genStatus, setGenStatus] = useState('')
+  const [currentAttempt, setCurrentAttempt] = useState(0)
+  const [currentScore, setCurrentScore] = useState(0)
+  const [statusMsgIndex, setStatusMsgIndex] = useState(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Cycle status messages every 4 seconds during generation
+  useEffect(() => {
+    if (isGenerating) {
+      intervalRef.current = setInterval(() => {
+        setStatusMsgIndex(i => (i + 1) % STATUS_MESSAGES.length)
+      }, 4000)
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      setStatusMsgIndex(0)
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [isGenerating])
 
   const handleGenerate = async () => {
     if (mode === 'tailor' && !jobDescription.trim()) {
@@ -26,6 +56,8 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
     }
 
     setIsGenerating(true)
+    setCurrentAttempt(1)
+    setCurrentScore(0)
 
     try {
       if (mode === 'tailor') {
@@ -48,6 +80,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
         let bestResult = response.tailored_resume
         let bestScore = response.ats_score ?? 0
         let jobAnalysis = response.job_analysis
+        setCurrentScore(bestScore)
 
         toast.success(`Attempt 1: ATS Score ${bestScore.toFixed(0)}`, { duration: 3000 })
 
@@ -55,6 +88,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
         for (let retry = 1; retry <= MAX_RETRIES; retry++) {
           if (bestScore >= TARGET_ATS_SCORE) break
 
+          setCurrentAttempt(retry + 1)
           setGenStatus(`Improving resume (attempt ${retry + 1}, current: ${bestScore.toFixed(0)})…`)
           try {
             const retryResp = await retryGeneration({
@@ -77,6 +111,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
                 bestResult = retryResp.tailored_resume
                 bestScore = newScore
                 jobAnalysis = retryResp.job_analysis
+                setCurrentScore(newScore)
               }
             }
           } catch (retryErr) {
@@ -107,6 +142,94 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
       setIsGenerating(false)
       setGenStatus('')
     }
+  }
+
+  if (isGenerating) {
+    const progressPercent = currentScore > 0 ? Math.min((currentScore / TARGET_ATS_SCORE) * 100, 100) : 0
+    const circumference = 2 * Math.PI * 54 // radius = 54
+    const strokeOffset = circumference - (progressPercent / 100) * circumference
+
+    return (
+      <div className="py-16 px-8 space-y-10 animate-fade-in">
+        {/* Animated Progress Ring */}
+        <div className="flex flex-col items-center">
+          <div className="relative w-36 h-36 mb-6">
+            {/* Background ring */}
+            <svg className="w-36 h-36 -rotate-90" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+              <circle
+                cx="60" cy="60" r="54" fill="none"
+                stroke="url(#gradient)" strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeOffset}
+                className="transition-all duration-1000 ease-out"
+              />
+              <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#818cf8" />
+                  <stop offset="100%" stopColor="#c084fc" />
+                </linearGradient>
+              </defs>
+            </svg>
+            {/* Score inside ring */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              {currentScore > 0 ? (
+                <>
+                  <span className="text-3xl font-black text-white tabular-nums">{currentScore.toFixed(0)}</span>
+                  <span className="text-xs font-semibold text-zinc-400 tracking-wider">ATS SCORE</span>
+                </>
+              ) : (
+                <div className="w-8 h-8 border-3 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+              )}
+            </div>
+            {/* Pulse glow */}
+            <div className="absolute inset-0 rounded-full bg-indigo-500/10 animate-ping opacity-20" />
+          </div>
+
+          {/* Attempt badge */}
+          <div className="badge badge-glow mb-4 inline-flex">
+            <Brain className="w-3.5 h-3.5 mr-2 text-indigo-300" />
+            <span>Attempt {currentAttempt} of {MAX_RETRIES + 1}</span>
+          </div>
+
+          {/* Cycling status message */}
+          <p className="text-zinc-300 text-[15px] font-medium text-center transition-opacity duration-500" key={statusMsgIndex}>
+            {STATUS_MESSAGES[statusMsgIndex]}
+          </p>
+        </div>
+
+        {/* Animated step indicators */}
+        <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto">
+          {[
+            { icon: FileText, label: 'Analyzing', done: currentScore > 0 },
+            { icon: BarChart3, label: 'Scoring', done: currentScore >= 80 },
+            { icon: Target, label: 'Targeting 92+', done: currentScore >= TARGET_ATS_SCORE },
+          ].map((step, i) => (
+            <div key={i} className="flex flex-col items-center gap-2">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 ${step.done
+                  ? 'bg-gradient-to-br from-emerald-400/20 to-teal-500/20 border border-emerald-500/30 shadow-[0_4px_15px_rgba(52,211,153,0.2)]'
+                  : 'glass border border-white/5'
+                }`}>
+                {step.done ? (
+                  <Check className="w-5 h-5 text-emerald-400" />
+                ) : (
+                  <step.icon className="w-5 h-5 text-zinc-500" />
+                )}
+              </div>
+              <span className={`text-xs font-semibold transition-colors ${step.done ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                {step.label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Info footer */}
+        <p className="text-center text-sm text-zinc-500 font-medium">
+          This may take 1–3 minutes. Each attempt improves keyword match and ATS compatibility.
+        </p>
+      </div>
+    )
   }
 
   return (
