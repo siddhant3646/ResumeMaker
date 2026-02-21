@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+// Use explicit Render URL in production to bypass Vercel proxy, or use local dev server
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://resumemaker-api.onrender.com' : 'http://localhost:8000')
 
 // Create axios instance
 const api = axios.create({
@@ -82,7 +83,7 @@ export const downloadResumePDF = async (resumeData: any) => {
 
 // WebSocket connection for real-time updates
 export const createWebSocket = (jobId: string) => {
-  const wsUrl = API_URL.replace('http', 'ws')
+  const wsUrl = API_URL.replace('http://', 'ws://').replace('https://', 'wss://');
   return new WebSocket(`${wsUrl}/ws/${jobId}`)
 }
 
