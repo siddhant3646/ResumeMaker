@@ -13,6 +13,174 @@ from copy import deepcopy
 logger = logging.getLogger(__name__)
 
 
+def convert_app_to_core(resume_data: Any) -> Any:
+    """Convert app.models ParsedResume to core.models format"""
+    from core.models import ParsedResume as CoreParsedResume
+    from core.models import Basics as CoreBasics
+    from core.models import Experience as CoreExperience
+    from core.models import Education as CoreEducation
+    from core.models import Skills as CoreSkills
+    from core.models import Project as CoreProject
+    
+    # Handle dict input
+    if isinstance(resume_data, dict):
+        basics_data = resume_data.get("basics", {})
+        basics = CoreBasics(
+            name=basics_data.get("name", ""),
+            email=basics_data.get("email", ""),
+            phone=basics_data.get("phone"),
+            location=basics_data.get("location"),
+            links=[]
+        )
+        
+        experience = []
+        for exp in resume_data.get("experience", []):
+            if isinstance(exp, dict):
+                experience.append(CoreExperience(
+                    company=exp.get("company", ""),
+                    role=exp.get("role", ""),
+                    startDate=exp.get("startDate", ""),
+                    endDate=exp.get("endDate"),
+                    location=exp.get("location"),
+                    bullets=exp.get("bullets", []),
+                    is_fabricated=exp.get("is_fabricated", False)
+                ))
+            else:
+                experience.append(CoreExperience(
+                    company=exp.company,
+                    role=exp.role,
+                    startDate=getattr(exp, 'startDate', ''),
+                    endDate=getattr(exp, 'endDate', None),
+                    location=getattr(exp, 'location', None),
+                    bullets=exp.bullets or [],
+                    is_fabricated=getattr(exp, 'is_fabricated', False)
+                ))
+        
+        education = []
+        for edu in resume_data.get("education", []):
+            if isinstance(edu, dict):
+                education.append(CoreEducation(
+                    institution=edu.get("institution", ""),
+                    studyType=edu.get("degree", "") or edu.get("studyType", ""),
+                    area=edu.get("field", "") or edu.get("area", ""),
+                    startDate=edu.get("startDate", ""),
+                    endDate=edu.get("graduationDate", "") or edu.get("endDate", ""),
+                    location=edu.get("location")
+                ))
+            else:
+                education.append(CoreEducation(
+                    institution=edu.institution,
+                    studyType=getattr(edu, 'degree', '') or getattr(edu, 'studyType', ''),
+                    area=getattr(edu, 'field', '') or getattr(edu, 'area', ''),
+                    startDate=getattr(edu, 'startDate', ''),
+                    endDate=getattr(edu, 'graduationDate', '') or getattr(edu, 'endDate', ''),
+                    location=getattr(edu, 'location', None)
+                ))
+        
+        skills_data = resume_data.get("skills", {})
+        if isinstance(skills_data, dict):
+            skills = CoreSkills(
+                languages_frameworks=skills_data.get("languages_frameworks", []),
+                tools=skills_data.get("tools", [])
+            )
+        else:
+            skills = CoreSkills(
+                languages_frameworks=getattr(skills_data, 'languages_frameworks', []) or [],
+                tools=getattr(skills_data, 'tools', []) or []
+            )
+        
+        projects = []
+        for proj in resume_data.get("projects", []):
+            if isinstance(proj, dict):
+                tech = proj.get("technologies", [])
+                tech_str = ", ".join(tech) if isinstance(tech, list) else str(tech)
+                projects.append(CoreProject(
+                    name=proj.get("name", ""),
+                    techStack=tech_str,
+                    description=proj.get("description", ""),
+                    is_fabricated=proj.get("is_fabricated", False)
+                ))
+            else:
+                tech = getattr(proj, 'technologies', [])
+                tech_str = ", ".join(tech) if isinstance(tech, list) else str(getattr(proj, 'techStack', ''))
+                projects.append(CoreProject(
+                    name=proj.name,
+                    techStack=tech_str,
+                    description=getattr(proj, 'description', ''),
+                    is_fabricated=getattr(proj, 'is_fabricated', False)
+                ))
+        
+        return CoreParsedResume(
+            basics=basics,
+            summary=resume_data.get("summary"),
+            experience=experience,
+            education=education,
+            skills=skills,
+            projects=projects,
+            achievements=resume_data.get("achievements", [])
+        )
+    
+    # Handle Pydantic model input
+    basics_obj = resume_data.basics
+    basics = CoreBasics(
+        name=basics_obj.name,
+        email=basics_obj.email,
+        phone=getattr(basics_obj, 'phone', None),
+        location=getattr(basics_obj, 'location', None),
+        links=[]
+    )
+    
+    experience = []
+    for exp in resume_data.experience:
+        experience.append(CoreExperience(
+            company=exp.company,
+            role=exp.role,
+            startDate=getattr(exp, 'startDate', ''),
+            endDate=getattr(exp, 'endDate', None),
+            location=getattr(exp, 'location', None),
+            bullets=exp.bullets or [],
+            is_fabricated=getattr(exp, 'is_fabricated', False)
+        ))
+    
+    education = []
+    for edu in resume_data.education:
+        education.append(CoreEducation(
+            institution=edu.institution,
+            studyType=getattr(edu, 'degree', '') or getattr(edu, 'studyType', ''),
+            area=getattr(edu, 'field', '') or getattr(edu, 'area', ''),
+            startDate=getattr(edu, 'startDate', ''),
+            endDate=getattr(edu, 'graduationDate', '') or getattr(edu, 'endDate', ''),
+            location=getattr(edu, 'location', None)
+        ))
+    
+    skills_obj = resume_data.skills
+    skills = CoreSkills(
+        languages_frameworks=getattr(skills_obj, 'languages_frameworks', []) or [],
+        tools=getattr(skills_obj, 'tools', []) or []
+    )
+    
+    projects = []
+    for proj in resume_data.projects:
+        tech = getattr(proj, 'technologies', [])
+        tech_str = ", ".join(tech) if isinstance(tech, list) else str(getattr(proj, 'techStack', ''))
+        projects.append(CoreProject(
+            name=proj.name,
+            techStack=tech_str,
+            description=getattr(proj, 'description', ''),
+            is_fabricated=getattr(proj, 'is_fabricated', False)
+        ))
+    
+    return CoreParsedResume(
+        basics=basics,
+        summary=getattr(resume_data, 'summary', None),
+        experience=experience,
+        education=education,
+        skills=skills,
+        projects=projects,
+        achievements=getattr(resume_data, 'achievements', []) or []
+    )
+
+
 def convert_core_to_app(core_resume: Any) -> Dict:
     """Convert core.models TailoredResume to plain dict for app.models"""
     
@@ -162,6 +330,9 @@ class AIClient:
             from core.models import GenerationConfig as CoreGenConfig
             from core.models import GenerationMode
             
+            # Convert app.models to core.models
+            core_resume = convert_app_to_core(resume_data)
+            
             content_gen = ContentGenerator(self.api_key, self.api_key)
             
             core_config = CoreGenConfig(
@@ -189,7 +360,7 @@ class AIClient:
                     job["stream_text"] = "Kimi K2.5 analyzing requirements..."
                     
                     tailored, job_analysis = content_gen.generate_tailored_resume(
-                        resume_data, job_description, core_config
+                        core_resume, job_description, core_config
                     )
                 else:
                     job["progress"] = 10.0 + (attempt - 1) * 8
@@ -199,7 +370,7 @@ class AIClient:
                     if best_tailored and previous_ats_feedback and job_analysis:
                         tailored = content_gen.regenerate_with_feedback(
                             previous_resume=best_tailored,
-                            original_resume=resume_data,
+                            original_resume=core_resume,
                             job_analysis=job_analysis,
                             ats_feedback=previous_ats_feedback,
                             config=core_config,
@@ -260,6 +431,9 @@ class AIClient:
             from core.models import GenerationConfig as CoreGenConfig
             from core.models import GenerationMode
             
+            # Convert app.models to core.models
+            core_resume = convert_app_to_core(resume_data)
+            
             config = CoreGenConfig(
                 generation_mode=GenerationMode.ATS_OPTIMIZE_ONLY,
                 fabrication_enabled=False,
@@ -269,7 +443,7 @@ class AIClient:
             
             content_gen = ContentGenerator(self.api_key, self.api_key)
             
-            tailored, job_analysis = content_gen.optimize_for_ats_only(resume_data, config)
+            tailored, job_analysis = content_gen.optimize_for_ats_only(core_resume, config)
             
             return convert_core_to_app(tailored) if tailored else None
             
@@ -349,10 +523,18 @@ IMPROVED TEXT:"""
         
         result_dict = None
         if result:
+            logger.info(f"Result type: {type(result)}, isinstance dict: {isinstance(result, dict)}")
             if hasattr(result, 'model_dump'):
                 result_dict = result.model_dump()
             elif isinstance(result, dict):
-                result_dict = result
+                # Deep convert any nested Pydantic models to dicts
+                import json
+                result_dict = json.loads(json.dumps(result, default=lambda o: o.dict() if hasattr(o, 'dict') else str(o)))
+            else:
+                # Unexpected type - try to convert
+                logger.warning(f"Unexpected result type: {type(result)}")
+                if hasattr(result, 'dict'):
+                    result_dict = result.dict()
         
         return {
             "job_id": job_id,
