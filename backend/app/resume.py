@@ -75,29 +75,46 @@ class ResumeProcessor:
         # Use existing renderer logic
         try:
             from fpdf import FPDF
+            import unicodedata
+            
+            def safe_txt(text: str) -> str:
+                if not text: return ""
+                replacements = {
+                    '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"',
+                    '\u2013': '-', '\u2014': '-', '\u2026': '...', '\u2022': '-',
+                    '\u00a0': ' ', '\t': '    '
+                }
+                for k, v in replacements.items():
+                    text = text.replace(k, v)
+                return unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
             
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
             
             # Basic PDF generation
-            pdf.cell(200, 10, txt=resume.basics.name, ln=True, align='C')
-            pdf.cell(200, 10, txt=resume.basics.email, ln=True, align='C')
+            pdf.cell(200, 10, txt=safe_txt(resume.basics.name), ln=True, align='C')
+            pdf.cell(200, 10, txt=safe_txt(resume.basics.email), ln=True, align='C')
+            if getattr(resume.basics, 'phone', None):
+                pdf.cell(200, 10, txt=safe_txt(resume.basics.phone), ln=True, align='C')
             
             if resume.summary:
                 pdf.ln(10)
-                pdf.multi_cell(0, 10, txt=resume.summary)
+                pdf.multi_cell(0, 10, txt=safe_txt(resume.summary))
             
             # Add experience
             for exp in resume.experience:
                 pdf.ln(5)
                 pdf.set_font("Arial", 'B', 12)
-                pdf.cell(0, 10, txt=f"{exp.role} at {exp.company}", ln=True)
+                pdf.cell(0, 10, txt=safe_txt(f"{exp.role} at {exp.company}"), ln=True)
                 pdf.set_font("Arial", size=12)
                 for bullet in exp.bullets:
-                    pdf.multi_cell(0, 10, txt=f"• {bullet}")
+                    pdf.multi_cell(0, 10, txt=safe_txt(f"- {bullet}"))
             
-            pdf_bytes = io.BytesIO(pdf.output(dest='S').encode('latin-1'))
+            out = pdf.output(dest='S')
+            if isinstance(out, str):
+                out = out.encode('latin-1')
+            pdf_bytes = io.BytesIO(out)
             return pdf_bytes
             
         except Exception as e:
