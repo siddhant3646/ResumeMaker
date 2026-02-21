@@ -4,7 +4,7 @@ import { generateResume, retryGeneration, optimizeATS } from '../services/api'
 import toast from 'react-hot-toast'
 
 const TARGET_ATS_SCORE = 92
-const MAX_RETRIES = 2 // initial + 2 retries = 3 total attempts
+const MAX_RETRIES = 9 // initial + 9 retries = 10 total attempts
 
 interface JobDescStepProps {
   resumeData: any
