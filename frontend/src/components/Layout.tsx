@@ -12,7 +12,11 @@ export default function Layout({ children }: LayoutProps) {
 
   const setupAuth = async () => {
     try {
-      const token = await getAccessTokenSilently()
+      const token = await getAccessTokenSilently({
+        authorizationParams: {
+          audience: import.meta.env.VITE_AUTH0_AUDIENCE || `https://${import.meta.env.VITE_AUTH0_DOMAIN}/api/v2/`
+        }
+      })
       setAuthToken(token)
     } catch (error) {
       console.error('Error getting token:', error)
