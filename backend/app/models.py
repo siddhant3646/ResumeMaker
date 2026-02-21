@@ -151,6 +151,8 @@ class GenerationResponse(BaseModel):
     job_id: str
     message: str
     status: GenerationStatus
+    tailored_resume: Optional[Dict[str, Any]] = None
+    ats_score: Optional[float] = None
 
 class GenerationStatusResponse(BaseModel):
     job_id: str

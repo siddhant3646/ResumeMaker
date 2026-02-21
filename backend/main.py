@@ -167,38 +167,43 @@ async def generate_resume(
     request: GenerationRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Generate a tailored resume based on job description"""
+    """Generate a tailored resume based on job description (synchronous).
+
+    This endpoint runs the full AI pipeline inline and returns the completed
+    resume in the response body.  No polling required.
+    """
     try:
-        # Validate API key
         if not NVIDIA_API_KEY:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="AI service not configured"
             )
-        
-        # Generate resume
-        job_id = await ai_client.start_generation(
+
+        result = await ai_client.generate_sync(
             resume_data=request.resume_data,
             job_description=request.job_description,
             config=request.config,
             user_id=current_user.get("sub")
         )
-        
+
         return GenerationResponse(
             success=True,
-            job_id=job_id,
-            message="Resume generation started",
-            status=GenerationStatus.PENDING
+            job_id="sync",  # sentinel; frontend no longer polls
+            message=f"Resume generated! ATS Score: {result.get('ats_score', 0):.0f}",
+            status=GenerationStatus.COMPLETED,
+            tailored_resume=result.get("tailored_resume"),
+            ats_score=result.get("ats_score")
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error starting generation: {e}")
+        logger.error(f"Error generating resume: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error starting generation: {str(e)}"
+            detail=f"Error generating resume: {str(e)}"
         )
+
 
 @app.post("/api/resume/optimize-ats")
 async def optimize_resume_ats(

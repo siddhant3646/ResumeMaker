@@ -36,21 +36,23 @@ def convert_app_to_core(resume_data: Any) -> Any:
         experience = []
         for exp in resume_data.get("experience", []):
             if isinstance(exp, dict):
+                end_date = exp.get("endDate") or ""
                 experience.append(CoreExperience(
-                    company=exp.get("company", ""),
-                    role=exp.get("role", ""),
-                    startDate=exp.get("startDate", ""),
-                    endDate=exp.get("endDate"),
+                    company=str(exp.get("company", "")),
+                    role=str(exp.get("role", "")),
+                    startDate=str(exp.get("startDate", "")),
+                    endDate=str(end_date),
                     location=exp.get("location"),
                     bullets=exp.get("bullets", []),
                     is_fabricated=exp.get("is_fabricated", False)
                 ))
             else:
+                end_date = getattr(exp, 'endDate', '') or ""
                 experience.append(CoreExperience(
-                    company=exp.company,
-                    role=exp.role,
-                    startDate=getattr(exp, 'startDate', ''),
-                    endDate=getattr(exp, 'endDate', None),
+                    company=str(exp.company),
+                    role=str(exp.role),
+                    startDate=str(getattr(exp, 'startDate', '')),
+                    endDate=str(end_date),
                     location=getattr(exp, 'location', None),
                     bullets=exp.bullets or [],
                     is_fabricated=getattr(exp, 'is_fabricated', False)
@@ -136,7 +138,7 @@ def convert_app_to_core(resume_data: Any) -> Any:
             company=exp.company,
             role=exp.role,
             startDate=getattr(exp, 'startDate', ''),
-            endDate=getattr(exp, 'endDate', None),
+            endDate=getattr(exp, 'endDate', '') or "",
             location=getattr(exp, 'location', None),
             bullets=exp.bullets or [],
             is_fabricated=getattr(exp, 'is_fabricated', False)
@@ -513,6 +515,75 @@ IMPROVED TEXT:"""
             logger.error(f"AI improvement failed: {e}")
             raise ValueError(f"AI improvement failed: {str(e)}")
     
+    async def generate_sync(
+        self,
+        resume_data: Any,
+        job_description: str,
+        config: Any,
+        user_id: str,
+    ) -> Dict:
+        """Run the full generation + retry loop synchronously and return the result dict.
+
+        This replaces the fire-and-forget + polling pattern.  The caller awaits this
+        coroutine; the HTTP response is sent only once generation is complete.
+        Returns a dict with keys ``tailored_resume`` and ``ats_score``.
+        """
+        from intelligence.content_generator import ContentGenerator
+        from core.models import GenerationConfig as CoreGenConfig
+        from core.models import GenerationMode
+
+        if not self.api_key:
+            raise ValueError("NVIDIA_API_KEY not configured")
+
+        core_resume = convert_app_to_core(resume_data)
+        content_gen = ContentGenerator(self.api_key, self.api_key)
+
+        core_config = CoreGenConfig(
+            generation_mode=GenerationMode.TAILOR_WITH_JD if job_description else GenerationMode.ATS_OPTIMIZE_ONLY,
+            fabrication_enabled=getattr(config, "fabrication_enabled", True),
+            target_ats_score=getattr(config, "target_ats_score", 92),
+            page_match_mode="optimize",
+        )
+
+        target_score = getattr(config, "target_ats_score", 92)
+        best_tailored = None
+        best_score = 0.0
+        previous_ats_feedback = None
+        job_analysis = None
+
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            if attempt == 1:
+                tailored, job_analysis = content_gen.generate_tailored_resume(
+                    core_resume, job_description, core_config
+                )
+            else:
+                if best_tailored and previous_ats_feedback and job_analysis:
+                    tailored = content_gen.regenerate_with_feedback(
+                        previous_resume=best_tailored,
+                        original_resume=core_resume,
+                        job_analysis=job_analysis,
+                        ats_feedback=previous_ats_feedback,
+                        config=core_config,
+                        retry_count=attempt,
+                    )
+                else:
+                    tailored = best_tailored
+
+            ats_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0.0
+            logger.info(f"[sync] Attempt {attempt}: ATS Score = {ats_score}")
+
+            if ats_score > best_score:
+                best_score = ats_score
+                best_tailored = tailored
+
+            if ats_score >= target_score:
+                break
+
+            previous_ats_feedback = tailored.ats_score if tailored else None
+
+        result_dict = convert_core_to_app(best_tailored) if best_tailored else None
+        return {"tailored_resume": result_dict, "ats_score": best_score}
+
     async def get_job_status(self, job_id: str) -> Dict:
         """Get job status and result"""
         if job_id not in self.jobs:

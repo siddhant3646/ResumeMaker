@@ -5,12 +5,12 @@ import toast from 'react-hot-toast'
 
 interface JobDescStepProps {
   resumeData: any
-  onGenerationStart: (jobId: string) => void
+  onGenerationComplete: (result: any) => void
   onAtsComplete: (tailoredResume: any) => void
   onBack: () => void
 }
 
-export default function JobDescStep({ resumeData, onGenerationStart, onAtsComplete, onBack }: JobDescStepProps) {
+export default function JobDescStep({ resumeData, onGenerationComplete, onAtsComplete, onBack }: JobDescStepProps) {
   const [jobDescription, setJobDescription] = useState('')
   const [mode, setMode] = useState<'tailor' | 'ats'>('tailor')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -34,9 +34,10 @@ export default function JobDescStep({ resumeData, onGenerationStart, onAtsComple
           }
         })
 
-        if (response.success) {
-          toast.success('Resume generation started!')
-          onGenerationStart(response.job_id)
+        if (response.success && response.tailored_resume) {
+          localStorage.setItem('tailored_resume', JSON.stringify(response.tailored_resume))
+          toast.success('Resume optimized successfully!')
+          onGenerationComplete(response.tailored_resume)
         } else {
           toast.error(response.message || 'Generation failed')
         }
@@ -52,7 +53,7 @@ export default function JobDescStep({ resumeData, onGenerationStart, onAtsComple
       }
     } catch (error) {
       console.error('Generation error:', error)
-      toast.error('Failed to start generation. Please try again.')
+      toast.error('Failed to generate resume. Please try again.')
     } finally {
       setIsGenerating(false)
     }
@@ -196,7 +197,7 @@ export default function JobDescStep({ resumeData, onGenerationStart, onAtsComple
           {isGenerating ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Starting Optimization...
+              Optimizing Resume...
             </>
           ) : (
             <>

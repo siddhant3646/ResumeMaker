@@ -9,7 +9,7 @@ export default function Home() {
   const navigate = useNavigate()
   const [currentStep, setCurrentStep] = useState(1)
   const [resumeData, setResumeData] = useState<any>(null)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [generationResult, setGenerationResult] = useState<any>(null)
 
   const steps = [
     { id: 1, name: 'Upload', icon: Upload, description: 'Upload your resume' },
@@ -22,12 +22,12 @@ export default function Home() {
     setCurrentStep(2)
   }
 
-  const handleGenerationStart = (id: string) => {
-    setJobId(id)
+  const handleGenerationComplete = (result: any) => {
+    setGenerationResult(result)
     setCurrentStep(3)
   }
 
-  const handleGenerationComplete = () => {
+  const handleGenerationDone = () => {
     navigate('/editor')
   }
 
@@ -146,9 +146,8 @@ export default function Home() {
             {currentStep === 2 && resumeData && (
               <JobDescStep
                 resumeData={resumeData}
-                onGenerationStart={handleGenerationStart}
+                onGenerationComplete={handleGenerationComplete}
                 onAtsComplete={(tailoredResume) => {
-                  // Save the result directly and navigate to editor
                   localStorage.setItem('tailored_resume', JSON.stringify(tailoredResume))
                   navigate('/editor')
                 }}
@@ -156,10 +155,10 @@ export default function Home() {
               />
             )}
 
-            {currentStep === 3 && jobId && (
+            {currentStep === 3 && generationResult !== null && (
               <ProgressStep
-                jobId={jobId}
-                onComplete={handleGenerationComplete}
+                result={generationResult}
+                onComplete={handleGenerationDone}
               />
             )}
           </div>
