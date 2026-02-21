@@ -41,6 +41,9 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
         }
 
         if (data.status === 'completed') {
+          if (data.result) {
+            localStorage.setItem('tailored_resume', JSON.stringify(data.result))
+          }
           toast.success('Resume optimized successfully!', { style: { borderRadius: '12px', background: '#059669', color: '#fff' } })
           setTimeout(onComplete, 1800)
         } else if (data.status === 'failed') {
@@ -77,6 +80,9 @@ export default function ProgressStep({ jobId, onComplete }: ProgressStepProps) {
 
         if (data.status === 'completed') {
           clearInterval(pollInterval)
+          if (data.result) {
+            localStorage.setItem('tailored_resume', JSON.stringify(data.result))
+          }
           toast.success('Resume optimized successfully!', { style: { borderRadius: '12px', background: '#059669', color: '#fff' } })
           setTimeout(onComplete, 1800)
         } else if (data.status === 'failed') {

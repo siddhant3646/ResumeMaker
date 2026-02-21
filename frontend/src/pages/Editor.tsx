@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Download, ArrowLeft, Edit3, Sparkles, CheckCircle, Target, BarChart3, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { downloadResumePDF } from '../services/api'
@@ -7,30 +7,21 @@ import toast from 'react-hot-toast'
 export default function Editor() {
   const navigate = useNavigate()
   const [isDownloading, setIsDownloading] = useState(false)
+  const [tailoredResume, setTailoredResume] = useState<any>(null)
 
-  const tailoredResume = {
-    basics: {
-      name: 'John Doe',
-      email: 'john@example.com',
-      phone: '+1 234 567 8900'
-    },
-    summary: 'Experienced software engineer with 5+ years of experience in full-stack development. Proven ability to elegantly architecture distributed systems and enhance microservices.',
-    experience: [
-      {
-        company: 'Tech Corp',
-        role: 'Senior Software Engineer',
-        bullets: [
-          'Led development of microservices architecture serving 1M+ users, ensuring 99.99% uptime',
-          'Improved system performance by 40% through rigorous profiling and optimization initiatives'
-        ]
+  useEffect(() => {
+    const saved = localStorage.getItem('tailored_resume')
+    if (saved) {
+      try {
+        setTailoredResume(JSON.parse(saved))
+      } catch (e) {
+        toast.error('Failed to load resume data')
+        navigate('/')
       }
-    ],
-    ats_score: {
-      overall: 92,
-      keyword_match: 95,
-      star_compliance: 90
+    } else {
+      navigate('/')
     }
-  }
+  }, [navigate])
 
   const handleDownload = async () => {
     setIsDownloading(true)
@@ -51,6 +42,8 @@ export default function Editor() {
       setIsDownloading(false)
     }
   }
+
+  if (!tailoredResume) return null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-in pb-12">
@@ -201,14 +194,14 @@ export default function Editor() {
           <h2 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-5">
             Professional Experience
           </h2>
-          {tailoredResume.experience.map((exp, idx) => (
+          {tailoredResume.experience.map((exp: any, idx: number) => (
             <div key={idx} className="mb-6 last:mb-0">
               <div className="flex flex-col sm:flex-row justify-between sm:items-baseline mb-3">
                 <h3 className="text-lg font-bold text-zinc-900">{exp.role}</h3>
                 <span className="text-sm text-zinc-500 font-semibold">{exp.company}</span>
               </div>
               <ul className="space-y-2.5">
-                {exp.bullets.map((bullet, bidx) => (
+                {exp.bullets.map((bullet: string, bidx: number) => (
                   <li key={bidx} className="flex items-start gap-3 text-zinc-700 text-[15px] font-medium leading-relaxed">
                     <span className="text-indigo-400 mt-1.5 text-xs">●</span>
                     <span className="flex-1">{bullet}</span>
