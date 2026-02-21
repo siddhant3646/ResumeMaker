@@ -21,6 +21,7 @@ from app.models import (
     GenerationRequest, GenerationResponse, GenerationStatus,
     TailoredResume, UserInfo
 )
+from pydantic import BaseModel
 from app.auth import verify_token, get_current_user
 from app.resume import ResumeProcessor
 from app.ai_client import AIClient
@@ -283,20 +284,124 @@ async def download_resume_pdf(
 ):
     """Generate and download resume as PDF"""
     try:
+        logger.info(f"Generating PDF for user {current_user.get('sub')}")
+        logger.info(f"Resume data received: {resume_data.model_dump()}")
+        
         pdf_bytes = await resume_processor.generate_pdf(resume_data)
         
         return StreamingResponse(
             pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename=tailored_resume.pdf"
+                "Content-Disposition": "attachment; filename=tailored_resume.pdf"
             }
         )
     except Exception as e:
-        logger.error(f"Error generating PDF: {e}")
+        logger.error(f"Error generating PDF: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating PDF: {str(e)}"
+        )
+
+# ============================================================================
+# AI Improve Text
+# ============================================================================
+
+class ImproveTextRequest(BaseModel):
+    original_text: str
+    user_prompt: str
+    context: str = "resume content"
+
+@app.post("/api/resume/improve")
+async def improve_text(
+    request: ImproveTextRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Improve text using AI (for edit feature)"""
+    try:
+        if not NVIDIA_API_KEY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service not configured"
+            )
+        
+        improved = await ai_client.improve_text(
+            original_text=request.original_text,
+            user_prompt=request.user_prompt,
+            context=request.context
+        )
+        
+        return {
+            "success": True,
+            "improved_text": improved
+        }
+        
+    except Exception as e:
+        logger.error(f"Error improving text: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error improving text: {str(e)}"
+        )
+
+# ============================================================================
+# Check ATS Score
+# ============================================================================
+
+class CheckATSScoreRequest(BaseModel):
+    resume_data: TailoredResume
+
+@app.post("/api/resume/check-ats")
+async def check_ats_score(
+    request: CheckATSScoreRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Check ATS score for a resume"""
+    try:
+        if not NVIDIA_API_KEY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service not configured"
+            )
+        
+        from intelligence.ats_scorer import ATSScorer
+        from core.models import JobAnalysis, SeniorityLevel, Industry, CompanyType
+        
+        scorer = ATSScorer(NVIDIA_API_KEY)
+        
+        job_analysis = JobAnalysis(
+            role_title="Software Engineer",
+            seniority_level=SeniorityLevel.MID,
+            years_experience_required=3,
+            key_skills=[],
+            nice_to_have_skills=[],
+            industry=Industry.TECH,
+            company_type=CompanyType.ENTERPRISE,
+            role_focus_areas=[],
+            missing_from_resume=[],
+            match_score=85.0
+        )
+        
+        ats_score = scorer.calculate_score(request.resume_data, job_analysis)
+        
+        return {
+            "success": True,
+            "ats_score": {
+                "overall": ats_score.overall,
+                "keyword_match": ats_score.keyword_match,
+                "star_compliance": ats_score.star_compliance,
+                "quantification": ats_score.quantification,
+                "action_verb_strength": ats_score.action_verb_strength,
+                "missing_keywords": ats_score.missing_keywords,
+                "weak_bullets": ats_score.weak_bullets,
+                "suggestions": ats_score.suggestions
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking ATS score: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error checking ATS score: {str(e)}"
         )
 
 # ============================================================================

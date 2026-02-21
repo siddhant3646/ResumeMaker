@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Download, ArrowLeft, Edit3, Sparkles, CheckCircle, Target, BarChart3, ShieldCheck } from 'lucide-react'
+import { Download, ArrowLeft, Edit3, Sparkles, CheckCircle, Target, BarChart3, ShieldCheck, RotateCcw, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { downloadResumePDF } from '../services/api'
+import { downloadResumePDF, checkATSScore } from '../services/api'
 import toast from 'react-hot-toast'
+import EditModal from '../components/EditModal'
 
 export default function Editor() {
   const navigate = useNavigate()
   const [isDownloading, setIsDownloading] = useState(false)
   const [tailoredResume, setTailoredResume] = useState<any>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isCheckingScore, setIsCheckingScore] = useState(false)
+  const [liveAtsScore, setLiveAtsScore] = useState<any>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('tailored_resume')
@@ -36,14 +40,44 @@ export default function Editor() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
       toast.success('Resume downloaded!')
-    } catch {
-      toast.error('Failed to download resume')
+    } catch (error: any) {
+      console.error('Download error:', error)
+      const message = error?.response?.data?.error || error?.message || 'Failed to download resume'
+      toast.error(message)
     } finally {
       setIsDownloading(false)
     }
   }
 
+  const handleSaveEdit = (updatedResume: any) => {
+    setTailoredResume(updatedResume)
+    localStorage.setItem('tailored_resume', JSON.stringify(updatedResume))
+  }
+
+  const handleCheckAts = async () => {
+    setIsCheckingScore(true)
+    try {
+      const result = await checkATSScore(tailoredResume)
+      if (result.success) {
+        setLiveAtsScore(result.ats_score)
+        toast.success('ATS Score updated!')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check ATS score')
+    } finally {
+      setIsCheckingScore(false)
+    }
+  }
+
+  const handleStartOver = () => {
+    localStorage.removeItem('tailored_resume')
+    localStorage.removeItem('parsed_resume')
+    navigate('/')
+  }
+
   if (!tailoredResume) return null;
+
+  const atsScore = liveAtsScore || tailoredResume.ats_score
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-in pb-12">
@@ -61,7 +95,15 @@ export default function Editor() {
 
         <div className="flex flex-wrap gap-3 w-full sm:w-auto">
           <button
-            onClick={() => toast('Edit feature coming soon!', { icon: '✨', style: { borderRadius: '12px', background: '#18181b', color: '#fff' } })}
+            onClick={handleStartOver}
+            className="flex-1 sm:flex-none btn-secondary gap-2"
+          >
+            <RotateCcw className="h-4 w-4" />
+            <span>Start Over</span>
+          </button>
+
+          <button
+            onClick={() => setIsEditModalOpen(true)}
             className="flex-1 sm:flex-none btn-secondary gap-2"
           >
             <Edit3 className="h-4 w-4" />
@@ -98,7 +140,9 @@ export default function Editor() {
           <div className="flex items-center gap-6 glass px-6 py-4 rounded-2xl">
             <div className="text-right">
               <div className="text-sm font-semibold text-zinc-400 tracking-wide uppercase mb-1">ATS Score</div>
-              <div className="text-[13px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md inline-block">Excellent</div>
+              <div className="text-[13px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md inline-block">
+                {atsScore?.overall >= 90 ? 'Excellent' : atsScore?.overall >= 80 ? 'Good' : 'Needs Work'}
+              </div>
             </div>
             {/* Circular Progress */}
             <div className="relative w-20 h-20 drop-shadow-lg">
@@ -119,7 +163,7 @@ export default function Editor() {
                   stroke="url(#gradient)"
                   strokeWidth="6"
                   fill="transparent"
-                  strokeDasharray={`${2 * Math.PI * 36 * (tailoredResume.ats_score.overall / 100)} ${2 * Math.PI * 36}`}
+                  strokeDasharray={`${2 * Math.PI * 36 * ((atsScore?.overall || 0) / 100)} ${2 * Math.PI * 36}`}
                   strokeLinecap="round"
                   className="transition-all duration-1000 ease-out"
                 />
@@ -131,7 +175,7 @@ export default function Editor() {
                 </defs>
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[28px] font-black text-white">{tailoredResume.ats_score.overall}</span>
+                <span className="text-[28px] font-black text-white">{atsScore?.overall || 0}</span>
               </div>
             </div>
           </div>
@@ -145,7 +189,7 @@ export default function Editor() {
             </div>
             <div>
               <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-0.5">Keywords</div>
-              <div className="text-xl font-bold text-emerald-400">{tailoredResume.ats_score.keyword_match}%</div>
+              <div className="text-xl font-bold text-emerald-400">{atsScore?.keyword_match || 0}%</div>
             </div>
           </div>
           <div className="glass-dark rounded-2xl p-5 hover:bg-white/[0.04] transition-colors flex items-center gap-4">
@@ -154,7 +198,7 @@ export default function Editor() {
             </div>
             <div>
               <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-0.5">STAR Format</div>
-              <div className="text-xl font-bold text-blue-400">{tailoredResume.ats_score.star_compliance}%</div>
+              <div className="text-xl font-bold text-blue-400">{atsScore?.star_compliance || 0}%</div>
             </div>
           </div>
           <div className="glass-dark rounded-2xl p-5 hover:bg-white/[0.04] transition-colors flex items-center gap-4">
@@ -163,11 +207,29 @@ export default function Editor() {
             </div>
             <div>
               <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-0.5">Quantification</div>
-              <div className="text-xl font-bold text-purple-400">88%</div>
+              <div className="text-xl font-bold text-purple-400">{atsScore?.quantification || 0}%</div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Fabrication Notes */}
+      {tailoredResume.fabrication_notes?.length > 0 && (
+        <div className="glass-dark rounded-2xl p-5 border border-amber-500/20">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-5 h-5 text-amber-400" />
+            <h3 className="text-lg font-semibold text-white">Content Enhancement Details</h3>
+          </div>
+          <ul className="space-y-2">
+            {tailoredResume.fabrication_notes.map((note: string, idx: number) => (
+              <li key={idx} className="text-sm text-zinc-400 flex items-start gap-2">
+                <span className="text-amber-400">•</span>
+                {note}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Resume Preview */}
       <div className="bg-white rounded-[2rem] p-10 sm:p-14 text-zinc-900 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 relative overflow-hidden">
@@ -214,17 +276,30 @@ export default function Editor() {
       </div>
 
       {/* AI Suggestions */}
-      <div className="flex justify-center pt-8">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
         <button
-          onClick={() => toast('AI suggestions coming soon!', { icon: '✨', style: { borderRadius: '12px', background: '#18181b', color: '#fff' } })}
-          className="group flex items-center gap-3 px-8 py-4 rounded-full glass-dark border border-white/10 hover:bg-white/5 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1"
+          onClick={handleCheckAts}
+          disabled={isCheckingScore}
+          className="group flex items-center gap-3 px-8 py-4 rounded-full glass-dark border border-white/10 hover:bg-white/5 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 disabled:opacity-50"
         >
-          <Sparkles className="h-5 w-5 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
-          <span className="font-semibold text-white tracking-wide">Get AI Improvement Suggestions</span>
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-indigo-500/30 text-indigo-300 bg-indigo-500/10 ml-2">Soon</span>
+          {isCheckingScore ? (
+            <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Sparkles className="h-5 w-5 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
+          )}
+          <span className="font-semibold text-white tracking-wide">
+            {isCheckingScore ? 'Checking...' : 'Check ATS Score'}
+          </span>
         </button>
       </div>
+
+      {/* Edit Modal */}
+      <EditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        resume={tailoredResume}
+        onSave={handleSaveEdit}
+      />
     </div>
   )
 }
-
