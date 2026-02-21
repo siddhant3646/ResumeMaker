@@ -153,21 +153,24 @@ OUTPUT FORMAT: Return JSON with this structure:
     }
 }"""
 
+        # Convert Pydantic model to dict for safe access
+        resume_dict = resume_data.model_dump()
+        
         user_prompt = f"""JOB DESCRIPTION:
 {job_description}
 
 CURRENT RESUME:
-Name: {resume_data.get('basics', {}).get('name', '')}
-Email: {resume_data.get('basics', {}).get('email', '')}
+Name: {resume_dict.get('basics', {}).get('name', '')}
+Email: {resume_dict.get('basics', {}).get('email', '')}
 
 Experience:
-{json.dumps(resume_data.get('experience', []), indent=2)}
+{json.dumps(resume_dict.get('experience', []), indent=2)}
 
 Education:
-{json.dumps(resume_data.get('education', []), indent=2)}
+{json.dumps(resume_dict.get('education', []), indent=2)}
 
 Skills:
-{json.dumps(resume_data.get('skills', {}), indent=2)}
+{json.dumps(resume_dict.get('skills', {}), indent=2)}
 
 Please rewrite this resume to match the job description."""
 
@@ -223,14 +226,14 @@ Please rewrite this resume to match the job description."""
                 # Build TailoredResume from AI result
                 return TailoredResume(
                     basics=resume_data.basics,
-                    summary=ai_result.get("summary", resume_data.get("summary", "")),
+                    summary=ai_result.get("summary", resume_dict.get("summary", "")),
                     experience=[
-                        Experience(**exp) for exp in ai_result.get("experience", resume_data.get("experience", []))
+                        Experience(**exp) for exp in ai_result.get("experience", resume_dict.get("experience", []))
                     ],
                     education=resume_data.education,
-                    skills=Skills(**ai_result.get("skills", resume_data.get("skills", {}))),
+                    skills=Skills(**ai_result.get("skills", resume_dict.get("skills", {}))),
                     projects=resume_data.projects,
-                    achievements=ai_result.get("achievements", resume_data.get("achievements", [])),
+                    achievements=ai_result.get("achievements", resume_dict.get("achievements", [])),
                     ats_score=ai_result.get("ats_score", {
                         "overall": 90,
                         "keyword_match": 90,
@@ -247,13 +250,14 @@ Please rewrite this resume to match the job description."""
             logger.error(f"Unexpected error calling Mistral: {e}")
             raise
     
-    def _create_fallback_result(self, resume_data: Dict, content: str) -> Dict:
+    def _create_fallback_result(self, resume_data: ParsedResume, content: str) -> Dict:
         """Create a fallback result when JSON parsing fails"""
+        resume_dict = resume_data.model_dump()
         return {
-            "summary": resume_data.get("summary", ""),
-            "experience": resume_data.get("experience", []),
-            "skills": resume_data.get("skills", {}),
-            "achievements": resume_data.get("achievements", []),
+            "summary": resume_dict.get("summary", ""),
+            "experience": resume_dict.get("experience", []),
+            "skills": resume_dict.get("skills", {}),
+            "achievements": resume_dict.get("achievements", []),
             "ats_score": {
                 "overall": 90,
                 "keyword_match": 90,
