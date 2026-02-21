@@ -16,7 +16,7 @@ services:
         value: production
       # CORS - Frontend URL (will be updated after Vercel deployment)
       - key: FRONTEND_URL
-        value: https://resume-maker.vercel.app
+        value: https://resume-maker2-one.vercel.app
       # Auth0 Configuration
       - key: AUTH0_DOMAIN
         sync: false
