@@ -800,7 +800,7 @@ Return valid JSON:
             "model": "moonshotai/kimi-k2.5",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 1.0,
-            "max_tokens": 8000,
+            "max_tokens": 4096,
             "stream": False
         }
         response = requests.post(url, headers=headers, json=payload, timeout=180)
@@ -825,7 +825,7 @@ Return valid JSON:
             "model": "stepfun-ai/step-3.5-flash",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.7,
-            "max_tokens": 8000,
+            "max_tokens": 4096,
             "stream": False
         }
         response = requests.post(url, headers=headers, json=payload, timeout=120)
