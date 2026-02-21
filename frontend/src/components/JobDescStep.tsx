@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase, Brain, FileText, BarChart3 } from 'lucide-react'
-import { generateResume, retryGeneration, optimizeATS } from '../services/api'
+import { generateResume, optimizeATS } from '../services/api'
 import toast from 'react-hot-toast'
 
-const TARGET_ATS_SCORE = 92
-const MAX_RETRIES = 9
+const TARGET_ATS_SCORE = 93
 
 const STATUS_MESSAGES = [
   'Analyzing job description keywords…',
@@ -30,9 +29,6 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
   const [jobDescription, setJobDescription] = useState('')
   const [mode, setMode] = useState<'tailor' | 'ats'>('tailor')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [genStatus, setGenStatus] = useState('')
-  const [currentAttempt, setCurrentAttempt] = useState(0)
-  const [currentScore, setCurrentScore] = useState(0)
   const [statusMsgIndex, setStatusMsgIndex] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -56,13 +52,9 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
     }
 
     setIsGenerating(true)
-    setCurrentAttempt(1)
-    setCurrentScore(0)
 
     try {
       if (mode === 'tailor') {
-        // --- Initial generation ---
-        setGenStatus('Generating resume (attempt 1)…')
         const response = await generateResume({
           resume_data: resumeData,
           job_description: jobDescription,
@@ -72,60 +64,14 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
           }
         })
 
-        if (!response.success || !response.tailored_resume) {
+        if (response.success && response.tailored_resume) {
+          localStorage.setItem('tailored_resume', JSON.stringify(response.tailored_resume))
+          toast.success(`Resume optimized! ATS Score: ${(response.ats_score ?? 0).toFixed(0)}`)
+          onGenerationComplete(response.tailored_resume)
+        } else {
           toast.error(response.message || 'Generation failed')
-          return
         }
-
-        let bestResult = response.tailored_resume
-        let bestScore = response.ats_score ?? 0
-        let jobAnalysis = response.job_analysis
-        setCurrentScore(bestScore)
-
-        toast.success(`Attempt 1: ATS Score ${bestScore.toFixed(0)}`, { duration: 3000 })
-
-        // --- Client-driven retry loop ---
-        for (let retry = 1; retry <= MAX_RETRIES; retry++) {
-          if (bestScore >= TARGET_ATS_SCORE) break
-
-          setCurrentAttempt(retry + 1)
-          setGenStatus(`Improving resume (attempt ${retry + 1}, current: ${bestScore.toFixed(0)})…`)
-          try {
-            const retryResp = await retryGeneration({
-              resume_data: resumeData,
-              previous_result: bestResult,
-              job_analysis: jobAnalysis,
-              job_description: jobDescription,
-              retry_count: retry,
-              config: {
-                generation_mode: 'tailor_with_jd',
-                fabrication_enabled: true
-              }
-            })
-
-            if (retryResp.success && retryResp.tailored_resume) {
-              const newScore = retryResp.ats_score ?? 0
-              toast.success(`Attempt ${retry + 1}: ATS Score ${newScore.toFixed(0)}`, { duration: 3000 })
-
-              if (newScore > bestScore) {
-                bestResult = retryResp.tailored_resume
-                bestScore = newScore
-                jobAnalysis = retryResp.job_analysis
-                setCurrentScore(newScore)
-              }
-            }
-          } catch (retryErr) {
-            console.error(`Retry ${retry} failed:`, retryErr)
-            // Continue with best result so far
-            break
-          }
-        }
-
-        localStorage.setItem('tailored_resume', JSON.stringify(bestResult))
-        toast.success(`Resume optimized! Final ATS Score: ${bestScore.toFixed(0)}`)
-        onGenerationComplete(bestResult)
       } else {
-        setGenStatus('Optimizing for ATS…')
         const response = await optimizeATS({
           resume_data: resumeData
         })
@@ -140,29 +86,25 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
       toast.error('Failed to generate resume. Please try again.')
     } finally {
       setIsGenerating(false)
-      setGenStatus('')
     }
   }
 
   if (isGenerating) {
-    const progressPercent = currentScore > 0 ? Math.min((currentScore / TARGET_ATS_SCORE) * 100, 100) : 0
-    const circumference = 2 * Math.PI * 54 // radius = 54
-    const strokeOffset = circumference - (progressPercent / 100) * circumference
+    const circumference = 2 * Math.PI * 54
 
     return (
       <div className="py-16 px-8 space-y-10 animate-fade-in">
         {/* Animated Progress Ring */}
         <div className="flex flex-col items-center">
           <div className="relative w-36 h-36 mb-6">
-            {/* Background ring */}
-            <svg className="w-36 h-36 -rotate-90" viewBox="0 0 120 120">
+            <svg className="w-36 h-36 -rotate-90 animate-spin" style={{ animationDuration: '3s' }} viewBox="0 0 120 120">
               <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
               <circle
                 cx="60" cy="60" r="54" fill="none"
                 stroke="url(#gradient)" strokeWidth="8"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
-                strokeDashoffset={strokeOffset}
+                strokeDashoffset={circumference * 0.7}
                 className="transition-all duration-1000 ease-out"
               />
               <defs>
@@ -172,25 +114,17 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
                 </linearGradient>
               </defs>
             </svg>
-            {/* Score inside ring */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              {currentScore > 0 ? (
-                <>
-                  <span className="text-3xl font-black text-white tabular-nums">{currentScore.toFixed(0)}</span>
-                  <span className="text-xs font-semibold text-zinc-400 tracking-wider">ATS SCORE</span>
-                </>
-              ) : (
-                <div className="w-8 h-8 border-3 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-              )}
+              <Brain className="w-8 h-8 text-indigo-400 animate-pulse" />
             </div>
             {/* Pulse glow */}
             <div className="absolute inset-0 rounded-full bg-indigo-500/10 animate-ping opacity-20" />
           </div>
 
-          {/* Attempt badge */}
+          {/* Badge */}
           <div className="badge badge-glow mb-4 inline-flex">
-            <Brain className="w-3.5 h-3.5 mr-2 text-indigo-300" />
-            <span>Attempt {currentAttempt} of {MAX_RETRIES + 1}</span>
+            <Sparkles className="w-3.5 h-3.5 mr-2 text-indigo-300" />
+            <span>AI Optimizing — Target: {TARGET_ATS_SCORE}+</span>
           </div>
 
           {/* Cycling status message */}
@@ -202,31 +136,22 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
         {/* Animated step indicators */}
         <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto">
           {[
-            { icon: FileText, label: 'Analyzing', done: currentScore > 0 },
-            { icon: BarChart3, label: 'Scoring', done: currentScore >= 80 },
-            { icon: Target, label: 'Targeting 92+', done: currentScore >= TARGET_ATS_SCORE },
+            { icon: FileText, label: 'Analyzing' },
+            { icon: BarChart3, label: 'Scoring' },
+            { icon: Target, label: `Targeting ${TARGET_ATS_SCORE}+` },
           ].map((step, i) => (
             <div key={i} className="flex flex-col items-center gap-2">
-              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 ${step.done
-                  ? 'bg-gradient-to-br from-emerald-400/20 to-teal-500/20 border border-emerald-500/30 shadow-[0_4px_15px_rgba(52,211,153,0.2)]'
-                  : 'glass border border-white/5'
-                }`}>
-                {step.done ? (
-                  <Check className="w-5 h-5 text-emerald-400" />
-                ) : (
-                  <step.icon className="w-5 h-5 text-zinc-500" />
-                )}
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center glass border border-white/5">
+                <step.icon className="w-5 h-5 text-zinc-400 animate-pulse" style={{ animationDelay: `${i * 0.5}s` }} />
               </div>
-              <span className={`text-xs font-semibold transition-colors ${step.done ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                {step.label}
-              </span>
+              <span className="text-xs font-semibold text-zinc-500">{step.label}</span>
             </div>
           ))}
         </div>
 
         {/* Info footer */}
         <p className="text-center text-sm text-zinc-500 font-medium">
-          This may take 1–3 minutes. Each attempt improves keyword match and ATS compatibility.
+          This may take 2–5 minutes. The AI is iteratively improving your resume to reach ATS {TARGET_ATS_SCORE}+.
         </p>
       </div>
     )
@@ -370,7 +295,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
           {isGenerating ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              {genStatus || 'Optimizing Resume...'}
+              Optimizing Resume...
             </>
           ) : (
             <>
