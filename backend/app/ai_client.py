@@ -548,7 +548,7 @@ IMPROVED TEXT:"""
         )
 
         target_score = 93
-        max_attempts = 1  # single pass only — Render free tier 100s timeout
+        max_attempts = 2  # 2 passes with batched enhancement ≈ 60s total
         best_tailored = None
         best_score = 0.0
         previous_ats_feedback = None

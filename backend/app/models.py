@@ -64,17 +64,17 @@ class Basics(BaseModel):
     website: Optional[str] = None
 
 class Experience(BaseModel):
-    company: str
-    role: str
+    company: str = ""
+    role: str = ""
     location: Optional[str] = None
-    startDate: str
+    startDate: Optional[str] = ""
     endDate: Optional[str] = None
-    bullets: List[str]
+    bullets: List[str] = []
     is_fabricated: bool = False
 
 class Education(BaseModel):
-    institution: str
-    degree: str
+    institution: str = ""
+    degree: str = ""
     field: Optional[str] = None
     location: Optional[str] = None
     graduationDate: Optional[str] = None

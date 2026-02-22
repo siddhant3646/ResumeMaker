@@ -291,7 +291,7 @@ async def download_resume_pdf(
     """Generate and download resume as PDF"""
     try:
         logger.info(f"Generating PDF for user {current_user.get('sub')}")
-        logger.info(f"Resume data received: {resume_data.model_dump()}")
+        logger.info(f"Resume sections - experience: {len(resume_data.experience)}, education: {len(resume_data.education)}, skills: {bool(resume_data.skills)}")
         
         pdf_bytes = await resume_processor.generate_pdf(resume_data)
         
