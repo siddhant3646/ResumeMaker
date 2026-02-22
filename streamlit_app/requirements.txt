@@ -1,6 +1,8 @@
 # Streamlit Backend Requirements
 # ResumeMaker AI - Minimal dependencies for Streamlit Cloud
-# IMPORTANT: Do not include packages pre-installed by Streamlit (rich, pygments, etc.)
+
+# Web Framework
+streamlit
 
 # PDF Processing
 fpdf2
