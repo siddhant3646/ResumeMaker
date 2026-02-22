@@ -134,11 +134,12 @@ def convert_app_to_core(resume_data: Any) -> Any:
     
     experience = []
     for exp in resume_data.experience:
+        end_date = getattr(exp, 'endDate', '') or ""
         experience.append(CoreExperience(
-            company=exp.company,
-            role=exp.role,
-            startDate=getattr(exp, 'startDate', ''),
-            endDate=getattr(exp, 'endDate', '') or "",
+            company=str(exp.company),
+            role=str(exp.role),
+            startDate=str(getattr(exp, 'startDate', '')),
+            endDate=str(end_date),
             location=getattr(exp, 'location', None),
             bullets=exp.bullets or [],
             is_fabricated=getattr(exp, 'is_fabricated', False)
@@ -547,7 +548,7 @@ IMPROVED TEXT:"""
         )
 
         target_score = 93
-        max_attempts = 2  # capped at 2 to prevent Render 100s proxy timeout
+        max_attempts = 1  # single pass only — Render free tier 100s timeout
         best_tailored = None
         best_score = 0.0
         previous_ats_feedback = None

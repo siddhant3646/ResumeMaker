@@ -394,6 +394,91 @@ Output ONLY the improved bullet, nothing else:
             
             return self._clean_bullet(bullet)
 
+    def enhance_bullets_batch(
+        self,
+        bullets: List[str],
+        seniority_level: SeniorityLevel,
+        jd_keywords: List[str]
+    ) -> List[str]:
+        """
+        Enhance ALL bullets in a single AI call instead of one-per-bullet.
+        Returns enhanced bullets in same order. Falls back to originals on error.
+        """
+        if not bullets:
+            return []
+
+        # Separate already-optimized bullets from those needing work
+        needs_work: List[int] = []
+        results: List[str] = list(bullets)  # start with originals
+
+        for i, bullet in enumerate(bullets):
+            has_metrics = self._has_metrics(bullet)
+            keyword_count = sum(1 for kw in jd_keywords if kw.lower() in bullet.lower())
+            if not (has_metrics and keyword_count >= 2):
+                needs_work.append(i)
+
+        if not needs_work:
+            return results  # all already optimized
+
+        # Build numbered list of bullets that need enhancement
+        numbered = "\n".join(
+            f"{idx + 1}. {bullets[i]}" for idx, i in enumerate(needs_work)
+        )
+        kw_str = ", ".join(jd_keywords[:8])
+
+        prompt = f"""You are an expert resume writer. Transform ALL of the following resume bullets into STRICT STAR format.
+
+BULLETS TO IMPROVE:
+{numbered}
+
+JD KEYWORDS (integrate 2-3 per bullet): {kw_str}
+SENIORITY: {seniority_level.value}
+
+RULES FOR EVERY BULLET:
+1. Keep the core achievement/action from the original
+2. STAR format: Action Verb + Technical Achievement + Quantified Result
+3. Include 2-3 JD keywords naturally
+4. Must have a specific quantified result (%, $, time, scale)
+5. Start with a strong action verb (Architected, Engineered, Spearheaded, Optimized, Implemented, Developed, Designed)
+6. Keep between 20-30 words per bullet
+7. NO markdown, NO asterisks, NO brackets
+
+Return ONLY a valid JSON array with exactly {len(needs_work)} strings, one per bullet, in the same order:
+["improved bullet 1", "improved bullet 2", ...]
+"""
+
+        try:
+            response = self.client.generate_content(prompt, max_tokens=4096)
+            text = response.strip()
+
+            # Extract JSON array from response
+            import json as _json
+            bracket_start = text.find("[")
+            bracket_end = text.rfind("]")
+            if bracket_start != -1 and bracket_end != -1:
+                arr = _json.loads(text[bracket_start:bracket_end + 1])
+                if isinstance(arr, list) and len(arr) == len(needs_work):
+                    for idx, i in enumerate(needs_work):
+                        cleaned = self._clean_bullet(arr[idx])
+                        if not self._has_metrics(cleaned):
+                            metrics = self._generate_realistic_metrics(seniority_level)
+                            cleaned = self._add_metrics_to_bullet(cleaned, metrics)
+                        results[i] = cleaned
+                    print(f"DEBUG: Batch enhanced {len(needs_work)} bullets in 1 API call")
+                    return results
+
+            # If parsing failed, return originals with template metrics
+            print("DEBUG: Batch response parsing failed, using originals with metric injection")
+        except Exception as e:
+            print(f"DEBUG: Batch enhancement error: {e}")
+
+        # Fallback: just add metrics to bullets that lack them
+        for i in needs_work:
+            if not self._has_metrics(results[i]):
+                metrics = self._generate_realistic_metrics(seniority_level)
+                results[i] = self._add_metrics_to_bullet(results[i], metrics)
+        return results
+
 
 class ExperienceFabricator:
     """Generate plausible experience to fill gaps via Mistral Large 3"""

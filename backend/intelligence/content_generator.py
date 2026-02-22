@@ -300,16 +300,12 @@ Return the optimized resume in the same JSON format with all fields preserved.""
         target_count: int,
         config: GenerationConfig
     ) -> List[str]:
-        """Enhance existing bullets with STAR format and metrics"""
-        enhanced = []
-        for bullet in bullets:
-            enhanced_bullet = self.bullet_generator.enhance_existing_bullet(
-                bullet=bullet,
-                seniority_level=job_analysis.seniority_level,
-                jd_keywords=job_analysis.key_skills
-            )
-            enhanced.append(enhanced_bullet)
-        return enhanced
+        """Enhance existing bullets with STAR format and metrics (batched - single AI call)"""
+        return self.bullet_generator.enhance_bullets_batch(
+            bullets=bullets,
+            seniority_level=job_analysis.seniority_level,
+            jd_keywords=job_analysis.key_skills
+        )
     
     def _sanitize_bullet(self, bullet: str) -> str:
         """
@@ -803,7 +799,7 @@ Return valid JSON:
             "max_tokens": 4096,
             "stream": False
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=180)
+        response = requests.post(url, headers=headers, json=payload, timeout=90)
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)
@@ -828,7 +824,7 @@ Return valid JSON:
             "max_tokens": 4096,
             "stream": False
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         json_match = re.search(r'\{[\s\S]*\}', content)

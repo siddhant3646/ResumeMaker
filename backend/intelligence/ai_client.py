@@ -30,7 +30,7 @@ class MistralAIClient:
         }
 
         try:
-            response = requests.post(self.invoke_url, headers=headers, json=payload, timeout=180)
+            response = requests.post(self.invoke_url, headers=headers, json=payload, timeout=90)
             response.raise_for_status()
             result = response.json()
             return result["choices"][0]["message"]["content"]
