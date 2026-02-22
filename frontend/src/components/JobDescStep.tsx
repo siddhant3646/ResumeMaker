@@ -73,9 +73,10 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
 
         let bestResume = response.tailored_resume
         let bestScore = response.ats_score ?? 0
+        let bestPageFill = response.page_fill ?? 0
 
-        // Passes 2-5: improve until ATS >= TARGET_ATS_SCORE
-        for (let attempt = 2; attempt <= MAX_PASSES && bestScore < TARGET_ATS_SCORE; attempt++) {
+        // Passes 2-6: improve until ATS >= 90 AND page_fill >= 90
+        for (let attempt = 2; attempt <= MAX_PASSES && (bestScore < TARGET_ATS_SCORE || bestPageFill < 90); attempt++) {
           try {
             const improved = await regenerateResume({
               resume_data: bestResume,
@@ -85,9 +86,11 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
 
             if (improved.success && improved.tailored_resume) {
               const newScore = improved.ats_score ?? 0
-              if (newScore > bestScore) {
+              const newPageFill = improved.page_fill ?? 0
+              if (newScore > bestScore || newPageFill > bestPageFill) {
                 bestResume = improved.tailored_resume
                 bestScore = newScore
+                bestPageFill = newPageFill
               }
             }
           } catch (err) {
@@ -97,7 +100,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
         }
 
         localStorage.setItem('tailored_resume', JSON.stringify(bestResume))
-        toast.success(`Resume optimized! ATS Score: ${bestScore.toFixed(0)}`)
+        toast.success(`Resume optimized! ATS: ${bestScore.toFixed(0)}, Page: ${bestPageFill.toFixed(0)}%`)
         onGenerationComplete(bestResume)
       } else {
         const response = await optimizeATS({
