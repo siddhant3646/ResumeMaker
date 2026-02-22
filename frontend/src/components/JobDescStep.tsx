@@ -3,7 +3,7 @@ import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase, Brain, Fil
 import { generateResume, optimizeATS, regenerateResume } from '../services/api'
 import toast from 'react-hot-toast'
 
-const TARGET_ATS_SCORE = 90
+const TARGET_ATS_SCORE = 80
 const MAX_PASSES = 5
 
 const STATUS_MESSAGES = [
