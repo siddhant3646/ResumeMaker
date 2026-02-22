@@ -6,8 +6,9 @@ streamlit>=1.40.0
 fastapi>=0.109.0
 uvicorn>=0.27.0
 python-multipart>=0.0.6
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+python-jose==3.3.0
+passlib==1.7.4
+bcrypt>=4.0.0
 
 # PDF Processing
 fpdf2==2.7.8
@@ -42,9 +43,6 @@ aiohttp==3.9.3
 websockets==12.0
 
 # Utilities
-typer[all]>=0.9.0
+typer>=0.9.0
 rich>=13.0.0
 jinja2>=3.1.0
-
-# Optional: Redis for caching
-redis>=5.0.0
