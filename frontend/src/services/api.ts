@@ -1,7 +1,22 @@
 import axios, { AxiosError } from 'axios'
 
-// Use explicit Render URL in production to bypass Vercel proxy, or use local dev server
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://siddhant3646-resumemakerhugginface.hf.space' : 'http://localhost:8000')
+// Backend URL configuration
+// Only supports Streamlit backend
+const getApiUrl = (): string => {
+  const url = import.meta.env.VITE_API_URL
+  if (!url) {
+    console.error('VITE_API_URL is required')
+    throw new Error('API URL not configured')
+  }
+  
+  if (!url.startsWith('http')) {
+    console.warn('API URL should start with http:// or https://')
+  }
+  
+  return url
+}
+
+const API_URL = getApiUrl()
 
 // Create axios instance
 const api = axios.create({

@@ -88,14 +88,16 @@ class ContentGenerator:
         from intelligence.ai_client import MistralAIClient
         
         # Create a generic job analysis for ATS optimization
+        from core.models import SeniorityLevel, Industry, CompanyType
+        
         job_analysis = JobAnalysis(
             role_title="Software Engineer",
-            seniority_level="mid",
+            seniority_level=SeniorityLevel.MID,
             years_experience_required=3,
             key_skills=["programming", "software development", "problem solving"],
             nice_to_have_skills=[],
-            industry="technology",
-            company_type="enterprise",
+            industry=Industry.TECH,
+            company_type=CompanyType.ENTERPRISE,
             role_focus_areas=["backend", "frontend", "full-stack"],
             missing_from_resume=[],
             match_score=85.0
@@ -179,7 +181,7 @@ Return the optimized resume in the same JSON format with all fields preserved.""
                     tailored.experience = resume.experience
                 
                 # Calculate ATS score
-                ats_score = self.ats_scorer.calculate_ats_score(tailored, job_analysis)
+                ats_score = self.ats_scorer.calculate_score(tailored, job_analysis)
                 tailored.ats_score = ats_score
                 
                 return tailored, job_analysis
@@ -198,7 +200,7 @@ Return the optimized resume in the same JSON format with all fields preserved.""
                 fabrication_notes=["Error in ATS optimization - using original"]
             )
             
-            ats_score = self.ats_scorer.calculate_ats_score(tailored, job_analysis)
+            ats_score = self.ats_scorer.calculate_score(tailored, job_analysis)
             tailored.ats_score = ats_score
             
             return tailored, job_analysis

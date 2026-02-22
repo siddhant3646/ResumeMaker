@@ -62,19 +62,23 @@ app = FastAPI(
 )
 
 # CORS Configuration
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://resume-maker2-one.vercel.app",
+    "https://resume-maker1-rust.vercel.app",
+]
+
+# Add FRONTEND_URL if valid
+if FRONTEND_URL and FRONTEND_URL not in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS.append(FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        FRONTEND_URL, 
-        "http://localhost:5173", 
-        "http://localhost:3000",
-        "https://resume-maker2-one.vercel.app",
-        "https://resume-maker1-rust.vercel.app"
-    ],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # Security
@@ -106,9 +110,16 @@ async def health_check():
 @app.get("/api/auth/me", response_model=UserInfo)
 async def get_user_info(current_user: dict = Depends(get_current_user)):
     """Get current authenticated user info"""
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: missing user ID"
+        )
+    
     return UserInfo(
-        user_id=current_user.get("sub"),
-        email=current_user.get("email"),
+        user_id=user_id,
+        email=current_user.get("email") or "",
         name=current_user.get("name", current_user.get("nickname", "")),
         picture=current_user.get("picture")
     )
@@ -143,11 +154,14 @@ async def upload_resume(
         # Parse resume
         parsed_resume = await resume_processor.parse_pdf(content, api_key=NVIDIA_API_KEY)
         
+        # Ensure filename is a string
+        filename = file.filename or "unnamed.pdf"
+        
         return ResumeUploadResponse(
             success=True,
             message="Resume parsed successfully",
             resume_data=parsed_resume,
-            filename=file.filename
+            filename=filename
         )
         
     except HTTPException:
@@ -185,11 +199,18 @@ async def generate_resume(
                 detail="AI service not configured"
             )
 
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing user ID"
+            )
+
         result = await ai_client.generate_sync(
             resume_data=request.resume_data,
             job_description=request.job_description,
             config=request.config,
-            user_id=current_user.get("sub")
+            user_id=user_id
         )
 
         return {
@@ -245,11 +266,18 @@ async def regenerate_resume(
                 detail="AI service not configured"
             )
 
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing user ID"
+            )
+
         result = await ai_client.regenerate_single_pass(
             previous_resume=request.resume_data,
             job_description=request.job_description,
             attempt=request.attempt,
-            user_id=current_user.get("sub")
+            user_id=user_id
         )
 
         return {
@@ -297,10 +325,17 @@ async def consolidate_resume(
                 detail="AI service not configured"
             )
 
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing user ID"
+            )
+
         result = await ai_client.consolidate_resume(
             resume_data=request.resume_data,
             job_description=request.job_description,
-            user_id=current_user.get("sub")
+            user_id=user_id
         )
 
         return {
@@ -333,10 +368,17 @@ async def optimize_resume_ats(
                 detail="AI service not configured"
             )
         
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing user ID"
+            )
+
         # Single-pass ATS optimization
         result = await ai_client.optimize_for_ats(
             resume_data=request.resume_data,
-            user_id=current_user.get("sub")
+            user_id=user_id
         )
         
         return {

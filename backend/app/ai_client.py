@@ -7,7 +7,7 @@ import uuid
 import asyncio
 import logging
 from typing import Dict, Any, Optional, Tuple, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from copy import deepcopy
 
 logger = logging.getLogger(__name__)
@@ -300,17 +300,103 @@ def convert_core_to_app(core_resume: Any) -> Dict:
     }
 
 class AIClient:
-    """Kimi K2.5 AI client with job queue management and retry logic"""
+    """Kimi K2.5 AI client with job queue management, retry logic, and automatic cleanup"""
     
     MAX_ATTEMPTS = 5
+    JOB_TTL_HOURS = 1  # Jobs expire after 1 hour
+    CLEANUP_INTERVAL_SECONDS = 300  # Cleanup every 5 minutes
+    MAX_JOBS = 100  # Maximum number of concurrent jobs
     
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.jobs: Dict[str, Dict] = {}
         self.active_jobs: Dict[str, asyncio.Task] = {}
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._shutdown = False
         
         if not api_key:
             logger.warning("NVIDIA_API_KEY not set - AI generation may fail")
+        
+        # Start background cleanup task
+        self._start_cleanup_loop()
+    
+    def _start_cleanup_loop(self):
+        """Start the background job cleanup task"""
+        async def cleanup_loop():
+            while not self._shutdown:
+                try:
+                    await asyncio.sleep(self.CLEANUP_INTERVAL_SECONDS)
+                    await self._cleanup_expired_jobs()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Error in cleanup loop: {e}")
+        
+        self._cleanup_task = asyncio.create_task(cleanup_loop())
+        logger.info("Started job cleanup background task")
+    
+    async def _cleanup_expired_jobs(self):
+        """Remove expired jobs and free memory"""
+        cutoff = datetime.now() - timedelta(hours=self.JOB_TTL_HOURS)
+        expired_jobs = []
+        
+        for job_id, job in self.jobs.items():
+            updated_at = job.get("updated_at")
+            if updated_at and updated_at < cutoff:
+                expired_jobs.append(job_id)
+        
+        if expired_jobs:
+            logger.info(f"Cleaning up {len(expired_jobs)} expired jobs")
+            
+            for job_id in expired_jobs:
+                await self._cleanup_single_job(job_id)
+    
+    async def _cleanup_single_job(self, job_id: str):
+        """Clean up a single job and free associated resources"""
+        # Cancel active task if still running
+        if job_id in self.active_jobs:
+            task = self.active_jobs[job_id]
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            del self.active_jobs[job_id]
+        
+        # Clean up job data
+        if job_id in self.jobs:
+            job = self.jobs[job_id]
+            # Clear large data structures to free memory
+            job["resume_data"] = None
+            job["result"] = None
+            job["job_description"] = None
+            del self.jobs[job_id]
+    
+    async def shutdown(self):
+        """Graceful shutdown - cancel all jobs and cleanup"""
+        self._shutdown = True
+        
+        # Cancel cleanup task
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Cancel all active jobs
+        active_job_ids = list(self.active_jobs.keys())
+        logger.info(f"Shutting down {len(active_job_ids)} active jobs")
+        
+        for job_id in active_job_ids:
+            await self._cleanup_single_job(job_id)
+    
+    def __del__(self):
+        """Destructor - ensure cleanup on garbage collection"""
+        if not self._shutdown:
+            # Note: Cannot use async in __del__, so we just log
+            logger.warning("AIClient garbage collected without proper shutdown")
     
     async def start_generation(
         self,
