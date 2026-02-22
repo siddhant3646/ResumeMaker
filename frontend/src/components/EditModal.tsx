@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Loader2, Sparkles, Save, RotateCcw, Plus, Trash2 } from 'lucide-react'
 import { improveText, checkATSScore } from '../services/api'
 import toast from 'react-hot-toast'
@@ -18,6 +18,22 @@ export default function EditModal({ isOpen, onClose, resume, onSave }: EditModal
   const [isCheckingScore, setIsCheckingScore] = useState(false)
   const [showScore, setShowScore] = useState(false)
   const [atsScore, setAtsScore] = useState<any>(null)
+
+  // Sync editedResume with resume prop when it changes
+  useEffect(() => {
+    if (resume) {
+      setEditedResume(resume)
+    }
+  }, [resume])
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowScore(false)
+      setAtsScore(null)
+      setAiPrompt('')
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 

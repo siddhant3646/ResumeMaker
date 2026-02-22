@@ -275,23 +275,26 @@ export default function Editor() {
         </div>
       </div>
 
-      {/* AI Suggestions */}
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-        <button
-          onClick={handleCheckAts}
-          disabled={isCheckingScore}
-          className="group flex items-center gap-3 px-8 py-4 rounded-full glass-dark border border-white/10 hover:bg-white/5 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 disabled:opacity-50"
-        >
-          {isCheckingScore ? (
-            <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <Sparkles className="h-5 w-5 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
-          )}
-          <span className="font-semibold text-white tracking-wide">
-            {isCheckingScore ? 'Checking...' : 'Check ATS Score'}
-          </span>
-        </button>
-      </div>
+      {/* Re-check ATS Score - only show if score is below target */}
+      {atsScore?.overall < 90 && (
+        <div className="flex flex-col items-center justify-center gap-2 pt-6">
+          <button
+            onClick={handleCheckAts}
+            disabled={isCheckingScore}
+            className="group flex items-center gap-3 px-6 py-3 rounded-full glass-dark border border-amber-500/20 hover:bg-amber-500/10 transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
+          >
+            {isCheckingScore ? (
+              <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-amber-400 group-hover:text-amber-300 transition-colors" />
+            )}
+            <span className="font-medium text-amber-200 text-sm">
+              {isCheckingScore ? 'Analyzing...' : 'Re-analyze ATS Score'}
+            </span>
+          </button>
+          <p className="text-zinc-500 text-xs">Score below 90 - re-analyze after making edits</p>
+        </div>
+      )}
 
       {/* Edit Modal */}
       <EditModal

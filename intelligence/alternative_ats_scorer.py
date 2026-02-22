@@ -4,7 +4,7 @@ Complements AI-based scoring with objective, consistent metrics
 """
 
 import re
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 from core.models import ATSScore, ParsedResume, JobAnalysis
 
 
@@ -66,8 +66,9 @@ class AlternativeATSScorer:
             section_score * 0.05
         )
         
-        # Ensure minimum of 75 for any reasonable resume
-        overall = max(75, min(overall, 100))
+        # REMOVED: Artificial floor of 75 - allow true scoring
+        # Only cap at 100
+        overall = min(overall, 100)
         
         # Identify specific issues and suggestions
         missing_keywords = list(job_skills - skills)
@@ -136,32 +137,91 @@ class AlternativeATSScorer:
         
         return skills
     
-    def _score_keywords(self, resume_skills: Set[str], job_skills: Set[str], bullets: List[str] = None) -> int:
-        """Score keyword matching (0-100) - checks both skills AND bullets"""
+    def _score_keywords(self, resume_skills: Set[str], job_skills: Set[str], bullets: Optional[List[str]] = None) -> int:
+        """Score keyword matching (0-100) - checks skills AND bullets with fuzzy matching"""
         if not job_skills:
-            return 95  # High credit if no specific requirements
+            return 90  # High score if no specific requirements
         
-        matched = resume_skills & job_skills
+        matched = set()
         
-        # ALSO check keywords in bullets (this is critical!)
+        # Check skills section first
+        for skill in job_skills:
+            skill_lower = skill.lower()
+            if skill_lower in resume_skills:
+                matched.add(skill_lower)
+        
+        # Also check keywords in bullets with better matching
         if bullets:
             all_bullet_text = ' '.join(bullets).lower()
+            bullet_text_no_space = all_bullet_text.replace(' ', '')
+            
             for skill in job_skills:
-                if skill.lower() in all_bullet_text:
-                    matched.add(skill.lower())
+                skill_lower = skill.lower()
+                
+                # Skip if already matched
+                if skill_lower in matched:
+                    continue
+                
+                # 1. Exact match in bullets
+                if skill_lower in all_bullet_text:
+                    matched.add(skill_lower)
+                    continue
+                
+                # 2. Fuzzy match for multi-word skills (e.g., "spring boot" matches "SpringBoot")
+                skill_no_space = skill_lower.replace(' ', '')
+                if skill_no_space in bullet_text_no_space:
+                    matched.add(skill_lower)
+                    continue
+                
+                # 3. Check for common abbreviations and variants
+                abbreviations = {
+                    'kubernetes': ['k8s', 'kube'],
+                    'amazon web services': ['aws'],
+                    'google cloud platform': ['gcp', 'google cloud'],
+                    'microsoft azure': ['azure'],
+                    'continuous integration': ['ci'],
+                    'continuous deployment': ['cd'],
+                    'ci/cd': ['ci cd', 'cicd'],
+                    'machine learning': ['ml'],
+                    'artificial intelligence': ['ai'],
+                    'natural language processing': ['nlp'],
+                    'spring boot': ['springboot'],
+                    'node.js': ['nodejs', 'node'],
+                    'react.js': ['reactjs', 'react'],
+                    'vue.js': ['vuejs', 'vue'],
+                    'next.js': ['nextjs'],
+                    'typescript': ['ts'],
+                    'javascript': ['js'],
+                    'postgresql': ['postgres', 'psql'],
+                    'mongodb': ['mongo'],
+                    'redis': ['redis cache'],
+                    'elasticsearch': ['elastic', 'es'],
+                    'microservices': ['micro-service', 'micro service'],
+                    'docker': ['container', 'containerization'],
+                    'terraform': ['tf', 'iac'],
+                }
+                
+                if skill_lower in abbreviations:
+                    for abbrev in abbreviations[skill_lower]:
+                        if abbrev in all_bullet_text or abbrev.replace(' ', '') in bullet_text_no_space:
+                            matched.add(skill_lower)
+                            break
+                
+                # 4. Check for partial match (skill contains or is contained)
+                # Only for multi-word skills longer than 4 chars
+                if len(skill_lower) > 4 and ' ' in skill_lower:
+                    words = skill_lower.split()
+                    if all(w in all_bullet_text for w in words):
+                        matched.add(skill_lower)
         
-        # Calculate match percentage
+        # Calculate match percentage with progressive scoring
         if len(job_skills) > 0:
             match_ratio = len(matched) / len(job_skills)
-            # More generous scoring: 80% match = 90 score, 100% match = 100
-            base_score = int(match_ratio * 100)
-            # Bonus for exceeding requirements
-            bonus = min(5, max(0, len(matched) - len(job_skills)))
-            
-            # Higher floor (70) and allow full 100
-            return min(100, max(70, base_score + bonus))
+            # Progressive scoring: 50% match = 70, 75% = 85, 100% = 100
+            base_score = int(40 + match_ratio * 60)
+            return min(100, base_score)
         
-        return 95
+        return 90
     
     def _score_quantification(self, bullets: List[str]) -> int:
         """Score quantification in bullets (0-100)"""

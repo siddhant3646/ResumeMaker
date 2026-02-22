@@ -6,11 +6,41 @@ import os
 import uuid
 import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, List
 from datetime import datetime
 from copy import deepcopy
 
 logger = logging.getLogger(__name__)
+
+
+def validate_tailored_resume(tailored: Any) -> Tuple[bool, List[str]]:
+    """Validate that tailored resume has all required sections"""
+    issues = []
+    
+    if not tailored:
+        return False, ["Tailored resume is None"]
+    
+    if not hasattr(tailored, 'basics') or not tailored.basics:
+        issues.append("Missing basics section")
+    elif not getattr(tailored.basics, 'name', None):
+        issues.append("Missing name in basics")
+    
+    if not hasattr(tailored, 'experience') or not tailored.experience:
+        issues.append("Missing experience section")
+    elif len(tailored.experience) == 0:
+        issues.append("Experience array is empty")
+    else:
+        for i, exp in enumerate(tailored.experience):
+            if not getattr(exp, 'bullets', None) or len(exp.bullets) == 0:
+                issues.append(f"Experience {i} ({getattr(exp, 'company', 'unknown')}) has no bullets")
+    
+    if not hasattr(tailored, 'education') or not tailored.education:
+        issues.append("Missing education section")
+    
+    if not hasattr(tailored, 'skills') or not tailored.skills:
+        issues.append("Missing skills section")
+    
+    return len(issues) == 0, issues
 
 
 def convert_app_to_core(resume_data: Any) -> Any:
@@ -526,6 +556,9 @@ IMPROVED TEXT:"""
         """Server-side generation for the first pass.
         The frontend will drive subsequent passes via regenerate_single_pass 
         to ensure no single request hits the 60s proxy timeout.
+        
+        Returns:
+            Dict with tailored_resume, ats_score, page_status, success, continue_reason
         """
         import gc
         from core.models import GenerationConfig as CoreGenConfig
@@ -549,20 +582,72 @@ IMPROVED TEXT:"""
         try:
             logger.info("[sync] Starting initial generation pass")
             
-            # Initial generation pass (Attempt 1)
             tailored, job_analysis = content_gen.generate_tailored_resume(
                 core_resume, job_description, core_config
             )
             
             ats_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0.0
             logger.info(f"[sync] Initial pass complete: ATS = {ats_score}")
+            
+            # Validate the result
+            is_valid, validation_issues = validate_tailored_resume(tailored)
+            if not is_valid:
+                logger.warning(f"[sync] Validation issues: {validation_issues}")
+            
+            # Log detailed info
+            if tailored:
+                logger.info(f"[sync] Tailored has {len(tailored.experience)} experiences, "
+                           f"{len(tailored.education)} education entries, "
+                           f"skills: {bool(tailored.skills)}")
+            
+            # Check page fill
+            page_status = None
+            try:
+                from app.renderer import generate_pdf_to_bytes
+                from intelligence.page_manager import PageManager
+                
+                pdf_bytes = generate_pdf_to_bytes(tailored)
+                page_manager = PageManager()
+                page_status = page_manager.check_page_fill(pdf_bytes, target_fill=95)
+                logger.info(f"[sync] Page fill: {page_status.fill_percentage}%")
+            except Exception as e:
+                logger.warning(f"[sync] Page check failed: {e}")
 
         finally:
             del content_gen
             gc.collect()
 
         result_dict = convert_core_to_app(tailored) if tailored else None
-        return {"tailored_resume": result_dict, "ats_score": ats_score}
+        
+        # Calculate dual success conditions
+        target_score = 92
+        ats_passed = ats_score >= target_score
+        page_passed = page_status and not page_status.needs_content and \
+                      "CONSOLIDATE" not in (page_status.suggestion or "")
+        
+        # Determine continue reason
+        continue_reason = None
+        if not (ats_passed and page_passed):
+            if ats_passed and not page_passed:
+                continue_reason = "page_needs_content"
+            elif not ats_passed and page_passed:
+                continue_reason = "ats_needs_improvement"
+            else:
+                continue_reason = "both_need_improvement"
+        
+        return {
+            "tailored_resume": result_dict,
+            "ats_score": ats_score,
+            "page_status": {
+                "fill_percentage": page_status.fill_percentage if page_status else 100,
+                "needs_content": page_status.needs_content if page_status else False,
+                "suggestion": page_status.suggestion if page_status else None,
+                "current_page": page_status.current_page if page_status else 1,
+            } if page_status else None,
+            "success": ats_passed and page_passed,
+            "continue_reason": continue_reason,
+            "validation_issues": validation_issues if not is_valid else [],
+        }
 
 
     async def regenerate_single_pass(
@@ -571,27 +656,40 @@ IMPROVED TEXT:"""
         job_description: str,
         attempt: int,
         user_id: str,
+        force_variation: bool = False,
     ) -> Dict:
         """One improvement pass using ATS feedback from previous result.
         
         Called by the frontend in a loop until ATS >= target.
         Each call is ~30-60s, well within Render timeout.
+        
+        Returns:
+            Dict with tailored_resume, ats_score, page_status, success, continue_reason
         """
         import gc
         from intelligence.content_generator import ContentGenerator
         from core.models import GenerationConfig as CoreGenConfig
-        from core.models import GenerationMode
+        from core.models import GenerationMode, TailoredResume as CoreTailored, ATSScore as CoreATSScore
 
         if not self.api_key:
             raise ValueError("NVIDIA_API_KEY not configured")
 
-        # Convert the previous TailoredResume (app model) back to core models
         core_previous = convert_app_to_core(previous_resume)
         
-        # Build a core TailoredResume from the previous result
-        from core.models import TailoredResume as CoreTailored, ATSScore as CoreATSScore
+        ats_data = CoreATSScore(
+            overall=0,
+            keyword_match=0,
+            star_compliance=0,
+            quantification=0,
+            action_verb_strength=0,
+            format_compliance=80,
+            section_completeness=80,
+            missing_keywords=[],
+            weak_bullets=[],
+            shortcomings=[],
+            suggestions=[],
+        )
         
-        ats_data = None
         if hasattr(previous_resume, 'ats_score') and previous_resume.ats_score:
             ats_dict = previous_resume.ats_score if isinstance(previous_resume.ats_score, dict) else previous_resume.ats_score.model_dump()
             ats_data = CoreATSScore(
@@ -600,11 +698,17 @@ IMPROVED TEXT:"""
                 star_compliance=ats_dict.get('star_compliance', 0),
                 quantification=ats_dict.get('quantification', 0),
                 action_verb_strength=ats_dict.get('action_verb_strength', 0),
+                format_compliance=ats_dict.get('format_compliance', 80),
+                section_completeness=ats_dict.get('section_completeness', 80),
+                missing_keywords=ats_dict.get('missing_keywords', []),
+                weak_bullets=ats_dict.get('weak_bullets', []),
+                shortcomings=ats_dict.get('shortcomings', []),
+                suggestions=ats_dict.get('suggestions', []),
             )
         
         core_tailored = CoreTailored(
             basics=core_previous.basics,
-            summary=core_previous.summary,
+            summary=getattr(previous_resume, 'summary', None) or core_previous.summary,
             experience=core_previous.experience,
             education=core_previous.education,
             skills=core_previous.skills,
@@ -617,16 +721,13 @@ IMPROVED TEXT:"""
         core_config = CoreGenConfig(
             generation_mode=GenerationMode.TAILOR_WITH_JD,
             fabrication_enabled=True,
-            target_ats_score=93,
+            target_ats_score=92,
             page_match_mode="optimize",
         )
 
         content_gen = ContentGenerator(self.api_key, self.api_key)
         try:
-            # Analyze job to get job_analysis for regeneration
-            job_analysis = content_gen.role_detector.analyze_job_description(
-                job_description
-            )
+            job_analysis = content_gen.role_detector.analyze_job_description(job_description)
             
             tailored = content_gen.regenerate_with_feedback(
                 previous_resume=core_tailored,
@@ -635,13 +736,147 @@ IMPROVED TEXT:"""
                 ats_feedback=ats_data,
                 config=core_config,
                 retry_count=attempt,
+                force_variation=force_variation,
             )
             
             ats_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0.0
             logger.info(f"[regenerate] Attempt {attempt}: ATS = {ats_score}")
             
+            # Validate the result
+            is_valid, validation_issues = validate_tailored_resume(tailored)
+            if not is_valid:
+                logger.warning(f"[regenerate] Validation issues: {validation_issues}")
+            
+            # Check page fill
+            page_status = None
+            try:
+                from app.renderer import generate_pdf_to_bytes
+                from intelligence.page_manager import PageManager
+                
+                pdf_bytes = generate_pdf_to_bytes(tailored)
+                page_manager = PageManager()
+                page_status = page_manager.check_page_fill(pdf_bytes, target_fill=95)
+                logger.info(f"[regenerate] Page fill: {page_status.fill_percentage}%")
+            except Exception as e:
+                logger.warning(f"[regenerate] Page check failed: {e}")
+            
             result_dict = convert_core_to_app(tailored) if tailored else None
-            return {"tailored_resume": result_dict, "ats_score": ats_score}
+            
+            # Calculate dual success conditions
+            target_score = 92
+            ats_passed = ats_score >= target_score
+            page_passed = page_status and not page_status.needs_content and \
+                          "CONSOLIDATE" not in (page_status.suggestion or "")
+            
+            # Determine continue reason
+            continue_reason = None
+            if not (ats_passed and page_passed):
+                if ats_passed and not page_passed:
+                    continue_reason = "page_needs_content"
+                elif not ats_passed and page_passed:
+                    continue_reason = "ats_needs_improvement"
+                else:
+                    continue_reason = "both_need_improvement"
+            
+            return {
+                "tailored_resume": result_dict,
+                "ats_score": ats_score,
+                "page_status": {
+                    "fill_percentage": page_status.fill_percentage if page_status else 100,
+                    "needs_content": page_status.needs_content if page_status else False,
+                    "suggestion": page_status.suggestion if page_status else None,
+                    "current_page": page_status.current_page if page_status else 1,
+                } if page_status else None,
+                "success": ats_passed and page_passed,
+                "continue_reason": continue_reason,
+                "validation_issues": validation_issues if not is_valid else [],
+            }
+        finally:
+            del content_gen
+            gc.collect()
+
+    async def consolidate_resume(
+        self,
+        resume_data: Any,
+        job_description: str,
+        user_id: str,
+    ) -> Dict:
+        """Consolidate resume by removing weak bullets for sparse trailing pages.
+        
+        Called when page fill check indicates a sparse trailing page.
+        Uses the _consolidate_resume method from ContentGenerator.
+        """
+        import gc
+        from core.models import TailoredResume as CoreTailored, ATSScore as CoreATSScore
+        from intelligence.content_generator import ContentGenerator
+        
+        if not self.api_key:
+            raise ValueError("NVIDIA_API_KEY not configured")
+        
+        core_resume = convert_app_to_core(resume_data)
+        
+        # Build ATS feedback from existing score
+        ats_data = CoreATSScore(
+            overall=0,
+            keyword_match=0,
+            star_compliance=0,
+            quantification=0,
+            action_verb_strength=0,
+            format_compliance=80,
+            section_completeness=80,
+            missing_keywords=[],
+            weak_bullets=[],
+            shortcomings=[],
+            suggestions=[],
+        )
+        
+        if hasattr(resume_data, 'ats_score') and resume_data.ats_score:
+            ats_dict = resume_data.ats_score if isinstance(resume_data.ats_score, dict) else resume_data.ats_score.model_dump()
+            ats_data = CoreATSScore(
+                overall=ats_dict.get('overall', 0),
+                keyword_match=ats_dict.get('keyword_match', 0),
+                star_compliance=ats_dict.get('star_compliance', 0),
+                quantification=ats_dict.get('quantification', 0),
+                action_verb_strength=ats_dict.get('action_verb_strength', 0),
+                format_compliance=ats_dict.get('format_compliance', 80),
+                section_completeness=ats_dict.get('section_completeness', 80),
+                missing_keywords=ats_dict.get('missing_keywords', []),
+                weak_bullets=ats_dict.get('weak_bullets', []),
+                shortcomings=ats_dict.get('shortcomings', []),
+                suggestions=ats_dict.get('suggestions', []),
+            )
+        
+        # Build TailoredResume for consolidation
+        core_tailored = CoreTailored(
+            basics=core_resume.basics,
+            summary=core_resume.summary,
+            experience=core_resume.experience,
+            education=core_resume.education,
+            skills=core_resume.skills,
+            projects=core_resume.projects,
+            achievements=core_resume.achievements,
+            ats_score=ats_data,
+            fabrication_notes=getattr(resume_data, 'fabrication_notes', []) or [],
+        )
+        
+        content_gen = ContentGenerator(self.api_key, self.api_key)
+        try:
+            logger.info("[consolidate] Starting consolidation")
+            
+            # Trigger consolidation
+            consolidated = content_gen._consolidate_resume(core_tailored, ats_data)
+            
+            # Calculate new ATS score
+            ats_score = consolidated.ats_score.overall if consolidated and consolidated.ats_score else 0.0
+            logger.info(f"[consolidate] Consolidation complete: ATS = {ats_score}")
+            
+            result_dict = convert_core_to_app(consolidated) if consolidated else None
+            
+            return {
+                "tailored_resume": result_dict,
+                "ats_score": ats_score,
+                "message": "Resume consolidated for better page fit"
+            }
         finally:
             del content_gen
             gc.collect()

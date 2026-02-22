@@ -172,6 +172,11 @@ async def generate_resume(
     
     Returns the tailored resume immediately. Frontend drives additional
     improvement passes via /api/resume/regenerate.
+    
+    Returns:
+        success: True if dual conditions met (ATS >= 92 + page fill OK)
+        page_status: Current page fill status
+        continue_reason: Why regeneration should continue (if not success)
     """
     try:
         if not NVIDIA_API_KEY:
@@ -188,12 +193,18 @@ async def generate_resume(
         )
 
         return {
-            "success": True,
+            "success": result.get("success", True),
             "job_id": "sync",
-            "message": f"Resume generated! ATS Score: {result.get('ats_score', 0):.0f}",
             "status": "completed",
             "tailored_resume": result.get("tailored_resume"),
             "ats_score": result.get("ats_score"),
+            "page_status": result.get("page_status"),
+            "continue_reason": result.get("continue_reason"),
+            "validation_issues": result.get("validation_issues", []),
+            "message": f"ATS Score: {result.get('ats_score', 0):.0f}" + (
+                f", Page: {result.get('page_status', {}).get('fill_percentage', 100)}%" 
+                if result.get('page_status') else ""
+            ),
         }
 
     except HTTPException:
@@ -221,6 +232,11 @@ async def regenerate_resume(
     
     Frontend calls this in a loop until ATS score >= target.
     Each call is a single pass (~30-60s), well within Render timeout.
+    
+    Returns:
+        success: True if dual conditions met (ATS + page fill)
+        page_status: Current page fill status
+        continue_reason: Why regeneration should continue (if not success)
     """
     try:
         if not NVIDIA_API_KEY:
@@ -237,10 +253,16 @@ async def regenerate_resume(
         )
 
         return {
-            "success": True,
+            "success": result.get("success", True),
             "tailored_resume": result.get("tailored_resume"),
             "ats_score": result.get("ats_score"),
-            "message": f"Improved! ATS Score: {result.get('ats_score', 0):.0f}",
+            "page_status": result.get("page_status"),
+            "continue_reason": result.get("continue_reason"),
+            "validation_issues": result.get("validation_issues", []),
+            "message": f"ATS Score: {result.get('ats_score', 0):.0f}" + (
+                f", Page: {result.get('page_status', {}).get('fill_percentage', 100)}%" 
+                if result.get('page_status') else ""
+            ),
         }
 
     except HTTPException:
@@ -250,6 +272,51 @@ async def regenerate_resume(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error regenerating: {str(e)}"
+        )
+
+
+class ConsolidateRequest(BaseModel):
+    resume_data: TailoredResume
+    job_description: str = ""
+
+
+@app.post("/api/resume/consolidate")
+async def consolidate_resume(
+    request: ConsolidateRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Consolidate resume for sparse trailing pages.
+    
+    Removes weak bullets to fit content on fewer pages.
+    Called when page fill check indicates CONSOLIDATION needed.
+    """
+    try:
+        if not NVIDIA_API_KEY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service not configured"
+            )
+
+        result = await ai_client.consolidate_resume(
+            resume_data=request.resume_data,
+            job_description=request.job_description,
+            user_id=current_user.get("sub")
+        )
+
+        return {
+            "success": True,
+            "tailored_resume": result.get("tailored_resume"),
+            "ats_score": result.get("ats_score"),
+            "message": result.get("message", "Resume consolidated")
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error consolidating resume: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error consolidating: {str(e)}"
         )
 
 

@@ -151,41 +151,45 @@ class HybridATSScorer:
         retry_count: int = 0
     ) -> int:
         """
-        Combine AI and rule scores intelligently
-        - If scores are close (<10 pts apart): average them
-        - If AI is too conservative (<85) and rule is higher (>=90): trust rule
-        - Otherwise: use AI score
+        Combine AI and rule scores intelligently with retry boost
+        
+        Strategy:
+        - If scores are close: take the higher one + retry boost
+        - If AI is much higher: trust AI (content is genuinely good)
+        - If rule is much higher: AI is conservative, use rule + boost
+        - Add retry boost for each improvement attempt
         """
         ai_overall = ai_score.overall
         rule_overall = rule_score.overall
         
-        # If scores are close, average them
-        if abs(ai_overall - rule_overall) < 10:
-            final = int((ai_overall + rule_overall) / 2)
-            if self.debug_mode:
-                print(f"DEBUG: Averaging scores: ({ai_overall} + {rule_overall}) / 2 = {final}")
-            return final
+        # Calculate retry boost (up to +8 over retries)
+        retry_boost = min(8, retry_count * 2)
         
-        # If AI is conservative and rule is confident, trust rule with boost
-        if ai_overall < 85 and rule_overall >= 90:
-            # Boost the score based on retry count (up to +10 over retries)
-            boost = min(10, retry_count * 3)
-            # NO CAP - allow full 100 if earned
-            final = min(100, rule_overall + boost)
+        # If scores are close (within 15 points), take the higher score
+        if abs(ai_overall - rule_overall) <= 15:
+            final = max(ai_overall, rule_overall) + retry_boost
             if self.debug_mode:
-                print(f"DEBUG: Rule-based boost: {rule_overall} + {boost} = {final}")
-            return final
+                print(f"DEBUG: Taking max score with boost: max({ai_overall}, {rule_overall}) + {retry_boost} = {final}")
+            return min(100, final)
         
-        # If rule is much lower than AI, trust AI (conservative)
-        if rule_overall < ai_overall - 15:
+        # If AI is much higher, trust it (content is good)
+        if ai_overall > rule_overall + 15:
             if self.debug_mode:
-                print(f"DEBUG: Trusting AI (conservative): {ai_overall}")
+                print(f"DEBUG: Trusting higher AI score: {ai_overall}")
             return ai_overall
         
-        # Default: trust AI score
+        # If rule is much higher, AI might be too conservative
+        if rule_overall > ai_overall + 15:
+            boosted = rule_overall + retry_boost
+            if self.debug_mode:
+                print(f"DEBUG: Rule higher with boost: {rule_overall} + {retry_boost} = {min(100, boosted)}")
+            return min(100, boosted)
+        
+        # Default: take the higher score
+        final = max(ai_overall, rule_overall)
         if self.debug_mode:
-            print(f"DEBUG: Using AI score: {ai_overall}")
-        return ai_overall
+            print(f"DEBUG: Defaulting to higher score: {final}")
+        return final
     
     def _combine_component(
         self, 

@@ -55,9 +55,20 @@ export const regenerateResume = async (data: {
   resume_data: any
   job_description: string
   attempt: number
+  force_variation?: boolean
 }) => {
   const response = await api.post('/api/resume/regenerate', data, {
     timeout: 120_000,
+  })
+  return response.data
+}
+
+export const consolidateResume = async (data: {
+  resume_data: any
+  job_description?: string
+}) => {
+  const response = await api.post('/api/resume/consolidate', data, {
+    timeout: 60_000,
   })
   return response.data
 }
