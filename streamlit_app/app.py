@@ -13,13 +13,10 @@ import tempfile
 from io import BytesIO
 import asyncio
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from dotenv import load_dotenv
 load_dotenv()
 
-# Import application modules
+# Import application modules (local copies for Streamlit Cloud deployment)
 from backend.app.resume import ResumeProcessor
 from backend.app.ai_client import AIClient, convert_app_to_core
 from backend.app.models import TailoredResume

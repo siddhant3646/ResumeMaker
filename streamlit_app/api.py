@@ -16,32 +16,10 @@ from io import BytesIO
 from pathlib import Path
 import sys
 
-# Add parent directory to path for imports
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Verify required directories exist
-BACKEND_DIR = BASE_DIR / "backend"
-if not BACKEND_DIR.exists():
-    raise RuntimeError(f"Backend directory not found at: {BACKEND_DIR}")
-
-sys.path.insert(0, str(BACKEND_DIR))
-
 from dotenv import load_dotenv
 load_dotenv()
 
-# Validate required environment variables
-required_env_vars = [
-    "NVIDIA_API_KEY",
-    "AUTH0_DOMAIN",
-    "AUTH0_CLIENT_ID",
-    "AUTH0_CLIENT_SECRET"
-]
-
-for var in required_env_vars:
-    if not os.getenv(var):
-        raise RuntimeError(f"Required environment variable '{var}' is not set")
-
-# Import application modules
+# Import application modules (local copies for Streamlit Cloud deployment)
 from backend.app.resume import ResumeProcessor
 from backend.app.ai_client import AIClient, convert_app_to_core, validate_tailored_resume
 from backend.app.models import (
