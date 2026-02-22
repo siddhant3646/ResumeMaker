@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 // Use explicit Render URL in production to bypass Vercel proxy, or use local dev server
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://resumemaker-api.onrender.com' : 'http://localhost:8000')
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://siddhant3646-resumemakerhugginface.hf.space' : 'http://localhost:8000')
 
 // Create axios instance
 const api = axios.create({
