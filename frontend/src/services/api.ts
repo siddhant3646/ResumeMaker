@@ -58,7 +58,7 @@ export const regenerateResume = async (data: {
   force_variation?: boolean
 }) => {
   const response = await api.post('/api/resume/regenerate', data, {
-    timeout: 120_000,
+    timeout: 300_000, // 5 minutes for HuggingFace
   })
   return response.data
 }
