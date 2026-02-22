@@ -106,6 +106,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
 
         localStorage.setItem('tailored_resume', JSON.stringify(bestResume))
         toast.success(`Resume optimized! ATS: ${bestScore.toFixed(0)}, Page: ${bestPageFill.toFixed(0)}%`)
+        console.log('Calling onGenerationComplete with:', bestResume)
         onGenerationComplete(bestResume)
       } else {
         const response = await optimizeATS({

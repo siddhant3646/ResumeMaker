@@ -23,6 +23,7 @@ export default function Home() {
   }
 
   const handleGenerationComplete = (result: any) => {
+    console.log('handleGenerationComplete called with:', result)
     setGenerationResult(result)
     setCurrentStep(3)
   }
