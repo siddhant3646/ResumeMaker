@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 // Use explicit Render URL in production to bypass Vercel proxy, or use local dev server
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://resumemaker-api.onrender.com' : 'http://localhost:8000')
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://siddhant3646-resumemaker.hf.space' : 'http://localhost:8000')
 
 // Create axios instance
 const api = axios.create({
@@ -46,18 +46,7 @@ export const generateResume = async (data: {
   config?: any
 }) => {
   const response = await api.post('/api/resume/generate', data, {
-    timeout: 120_000, // 2 min max for single pass
-  })
-  return response.data
-}
-
-export const regenerateResume = async (data: {
-  resume_data: any
-  job_description: string
-  attempt: number
-}) => {
-  const response = await api.post('/api/resume/regenerate', data, {
-    timeout: 120_000,
+    timeout: 600_000, // 10 min max for 5-pass generation
   })
   return response.data
 }
