@@ -75,27 +75,32 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
         let bestScore = response.ats_score ?? 0
         let bestPageFill = response.page_fill ?? 0
 
-        // Passes 2-6: improve until ATS >= 90 AND page_fill >= 90
-        for (let attempt = 2; attempt <= MAX_PASSES && (bestScore < TARGET_ATS_SCORE || bestPageFill < 90); attempt++) {
-          try {
-            const improved = await regenerateResume({
-              resume_data: bestResume,
-              job_description: jobDescription,
-              attempt
-            })
+        // If initial score is already good (>=85 ATS, >=90% page), skip regeneration to avoid HF timeout
+        if (bestScore >= 85 && bestPageFill >= 90) {
+          // Proceed with current result - no regeneration needed
+        } else {
+          // Passes 2-6: improve until ATS >= 90 AND page_fill >= 90
+          for (let attempt = 2; attempt <= MAX_PASSES && (bestScore < TARGET_ATS_SCORE || bestPageFill < 90); attempt++) {
+            try {
+              const improved = await regenerateResume({
+                resume_data: bestResume,
+                job_description: jobDescription,
+                attempt
+              })
 
-            if (improved.success && improved.tailored_resume) {
-              const newScore = improved.ats_score ?? 0
-              const newPageFill = improved.page_fill ?? 0
-              if (newScore > bestScore || newPageFill > bestPageFill) {
-                bestResume = improved.tailored_resume
-                bestScore = newScore
-                bestPageFill = newPageFill
+              if (improved.success && improved.tailored_resume) {
+                const newScore = improved.ats_score ?? 0
+                const newPageFill = improved.page_fill ?? 0
+                if (newScore > bestScore || newPageFill > bestPageFill) {
+                  bestResume = improved.tailored_resume
+                  bestScore = newScore
+                  bestPageFill = newPageFill
+                }
               }
+            } catch (err) {
+              console.warn(`Regeneration attempt ${attempt} failed, using best so far`)
+              break
             }
-          } catch (err) {
-            console.warn(`Regeneration attempt ${attempt} failed, using best so far`)
-            break
           }
         }
 
