@@ -46,7 +46,7 @@ export const generateResume = async (data: {
   config?: any
 }) => {
   const response = await api.post('/api/resume/generate', data, {
-    timeout: 120_000, // 2 min max for single pass
+    timeout: 300_000, // 5 minutes for HuggingFace cold start
   })
   return response.data
 }
