@@ -548,7 +548,7 @@ IMPROVED TEXT:"""
         )
 
         target_score = 93
-        max_attempts = 2  # 2 passes with batched enhancement ≈ 60s total
+        max_attempts = 3  # 3 passes with batched enhancement ≈ 60-90s total
         best_tailored = None
         best_score = 0.0
         previous_ats_feedback = None
