@@ -163,15 +163,15 @@ async def upload_resume(
 # Resume Generation
 # ============================================================================
 
-@app.post("/api/resume/generate", response_model=GenerationResponse)
+@app.post("/api/resume/generate")
 async def generate_resume(
     request: GenerationRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Generate a tailored resume based on job description (synchronous).
+    """Start async resume generation — returns job_id immediately.
 
-    This endpoint runs the full AI pipeline inline and returns the completed
-    resume in the response body.  No polling required.
+    The actual AI pipeline runs as a background task (no timeout constraint).
+    Frontend polls GET /api/resume/status/{job_id} for progress and results.
     """
     try:
         if not NVIDIA_API_KEY:
@@ -180,29 +180,27 @@ async def generate_resume(
                 detail="AI service not configured"
             )
 
-        result = await ai_client.generate_sync(
+        job_id = await ai_client.start_generation(
             resume_data=request.resume_data,
             job_description=request.job_description,
             config=request.config,
             user_id=current_user.get("sub")
         )
 
-        return GenerationResponse(
-            success=True,
-            job_id="sync",
-            message=f"Resume generated! ATS Score: {result.get('ats_score', 0):.0f}",
-            status=GenerationStatus.COMPLETED,
-            tailored_resume=result.get("tailored_resume"),
-            ats_score=result.get("ats_score"),
-        )
+        return {
+            "success": True,
+            "job_id": job_id,
+            "message": "Generation started",
+            "status": "pending",
+        }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating resume: {e}", exc_info=True)
+        logger.error(f"Error starting generation: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating resume: {str(e)}"
+            detail=f"Error starting generation: {str(e)}"
         )
 
 

@@ -272,7 +272,7 @@ def convert_core_to_app(core_resume: Any) -> Dict:
 class AIClient:
     """Kimi K2.5 AI client with job queue management and retry logic"""
     
-    MAX_ATTEMPTS = 10
+    MAX_ATTEMPTS = 5
     
     def __init__(self, api_key: str):
         self.api_key = api_key
