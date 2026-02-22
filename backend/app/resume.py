@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class ResumeProcessor:
     """Handle PDF resume parsing and generation"""
     
-    async def parse_pdf(self, content: bytes) -> ParsedResume:
-        """Parse PDF resume and extract structured data"""
+    async def parse_pdf(self, content: bytes, api_key: str = None) -> ParsedResume:
+        """Parse PDF resume and extract structured data using AI if available"""
         try:
             with pdfplumber.open(io.BytesIO(content)) as pdf:
                 text = ""
@@ -23,9 +23,92 @@ class ResumeProcessor:
                     if page_text:
                         text += page_text + "\n\n"
                 
-                # Parse structured data from text
-                # In production, use AI to extract structured data
-                # For now, create a basic structure
+                if api_key:
+                    try:
+                        from intelligence.ai_client import MistralAIClient
+                        client = MistralAIClient(api_key)
+                        prompt = f"""Parse this resume text and extract structured information into a complete JSON format.
+
+ Resume Text:
+ {text[:6000]}
+
+ Instructions:
+ 1. Extract EVERYTHING. Do not skip education entries, achievements, or experience bullets.
+ 2. Ensure dates are in YYYY-MM or similar standardized format.
+ 3. Achievements should be a list of strings, not mixed into experience if they are standalone.
+
+ Extract and return ONLY valid JSON with this exact structure:
+ {{
+     "basics": {{
+         "name": "full name",
+         "email": "email address",
+         "phone": "phone number",
+         "location": "city, country",
+         "links": ["linkedin url", "github url"]
+     }},
+     "education": [
+         {{
+             "institution": "school name",
+             "studyType": "degree (e.g. MBA, B.Tech)",
+             "area": "field of study",
+             "startDate": "start date",
+             "endDate": "end date",
+             "location": "location"
+         }}
+     ],
+     "experience": [
+         {{
+             "company": "company name",
+             "role": "job title",
+             "startDate": "start date",
+             "endDate": "end date",
+             "location": "location",
+             "bullets": ["bullet 1", "bullet 2"]
+         }}
+     ],
+     "skills": {{
+         "languages_frameworks": ["python", "java", "react"],
+         "tools": ["docker", "aws"]
+     }},
+     "projects": [
+         {{
+             "name": "project name",
+             "techStack": "technologies used",
+             "description": "brief description"
+         }}
+     ],
+     "achievements": ["achievement 1", "achievement 2"]
+ }}"""
+                        response_text = client.generate_content(prompt, temperature=0.1)
+                        data = client.extract_json(response_text)
+                        
+                        if data:
+                            from app.models import Basics, Education, Experience, Skills, Project, ParsedResume
+                            basics = Basics(**data.get('basics', {}))
+                            education = [Education(**edu) for edu in data.get('education', [])]
+                            experience = [Experience(**exp) for exp in data.get('experience', [])]
+                            
+                            skills_dict = data.get('skills', {})
+                            skills = Skills(
+                                languages_frameworks=skills_dict.get('languages_frameworks', []),
+                                tools=skills_dict.get('tools', []),
+                                methodologies=skills_dict.get('methodologies', [])
+                            )
+                            
+                            projects = [Project(**proj) for proj in data.get('projects', [])]
+                            
+                            return ParsedResume(
+                                basics=basics,
+                                education=education,
+                                experience=experience,
+                                skills=skills,
+                                projects=projects,
+                                achievements=data.get('achievements', [])
+                            )
+                    except Exception as ai_e:
+                        logger.error(f"AI extraction failed, falling back: {ai_e}")
+
+                # Fallback to basic extraction
                 parsed_data = self._extract_resume_data(text)
                 return parsed_data
                 
@@ -71,115 +154,13 @@ class ResumeProcessor:
         return match.group(0) if match else ""
     
     async def generate_pdf(self, resume: TailoredResume) -> io.BytesIO:
-        """Generate PDF from tailored resume data"""
+        """Generate PDF from tailored resume data using the advanced v2 renderer"""
         try:
-            from fpdf import FPDF
-            import unicodedata
+            from app.renderer import generate_pdf_to_bytes
             
-            def safe_txt(text) -> str:
-                if text is None: 
-                    return ""
-                text = str(text)
-                replacements = {
-                    '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"',
-                    '\u2013': '-', '\u2014': '-', '\u2026': '...', '\u2022': '*',
-                    '\u00a0': ' ', '\t': '    ',
-                    '\u2010': '-', '\u2011': '-', '\u2012': '-',
-                }
-                for k, v in replacements.items():
-                    text = text.replace(k, v)
-                normalized = unicodedata.normalize('NFKD', text)
-                return normalized.encode('latin-1', errors='replace').decode('latin-1')
-            
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_auto_page_break(auto=True, margin=15)
-            
-            name = getattr(resume.basics, 'name', None) or "Resume"
-            email = getattr(resume.basics, 'email', None) or ""
-            phone = getattr(resume.basics, 'phone', None) or ""
-            
-            pdf.set_font("Helvetica", 'B', 16)
-            pdf.cell(0, 10, text=safe_txt(name), new_x="LMARGIN", new_y="NEXT", align='C')
-            
-            pdf.set_font("Helvetica", size=10)
-            contact_parts = [p for p in [email, phone] if p]
-            if contact_parts:
-                pdf.cell(0, 8, text=safe_txt(" | ".join(contact_parts)), new_x="LMARGIN", new_y="NEXT", align='C')
-            
-            pdf.ln(5)
-            
-            summary = getattr(resume, 'summary', None)
-            if summary:
-                pdf.set_font("Helvetica", 'B', 11)
-                pdf.cell(0, 8, text="Professional Summary", new_x="LMARGIN", new_y="NEXT")
-                pdf.set_font("Helvetica", size=10)
-                pdf.multi_cell(0, 6, text=safe_txt(summary))
-                pdf.ln(5)
-            
-            experience = getattr(resume, 'experience', None) or []
-            if experience:
-                pdf.set_font("Helvetica", 'B', 11)
-                pdf.cell(0, 8, text="Professional Experience", new_x="LMARGIN", new_y="NEXT")
-                pdf.ln(2)
-                
-                for exp in experience:
-                    role = getattr(exp, 'role', '') or ""
-                    company = getattr(exp, 'company', '') or ""
-                    
-                    pdf.set_font("Helvetica", 'B', 10)
-                    header = f"{role} at {company}" if role and company else role or company
-                    if header:
-                        pdf.cell(0, 7, text=safe_txt(header), new_x="LMARGIN", new_y="NEXT")
-                    
-                    pdf.set_font("Helvetica", size=10)
-                    bullets = getattr(exp, 'bullets', None) or []
-                    for bullet in bullets:
-                        if bullet:
-                            pdf.multi_cell(0, 6, text=safe_txt(f"  * {bullet}"))
-                    pdf.ln(3)
-            
-            skills = getattr(resume, 'skills', None)
-            if skills:
-                all_skills = []
-                langs = getattr(skills, 'languages_frameworks', None) or []
-                tools = getattr(skills, 'tools', None) or []
-                methods = getattr(skills, 'methodologies', None) or []
-                all_skills = langs + tools + methods
-                
-                if all_skills:
-                    pdf.set_font("Helvetica", 'B', 11)
-                    pdf.cell(0, 8, text="Skills", new_x="LMARGIN", new_y="NEXT")
-                    pdf.set_font("Helvetica", size=10)
-                    pdf.multi_cell(0, 6, text=safe_txt(", ".join(all_skills)))
-                    pdf.ln(5)
-            
-            education = getattr(resume, 'education', None) or []
-            if education:
-                pdf.set_font("Helvetica", 'B', 11)
-                pdf.cell(0, 8, text="Education", new_x="LMARGIN", new_y="NEXT")
-                pdf.ln(2)
-                
-                for edu in education:
-                    institution = getattr(edu, 'institution', '') or ""
-                    degree = getattr(edu, 'degree', '') or ""
-                    field = getattr(edu, 'field', '') or ""
-                    
-                    pdf.set_font("Helvetica", 'B', 10)
-                    if institution:
-                        pdf.cell(0, 7, text=safe_txt(institution), new_x="LMARGIN", new_y="NEXT")
-                    
-                    pdf.set_font("Helvetica", size=10)
-                    degree_text = f"{degree} in {field}" if field else degree
-                    if degree_text:
-                        pdf.cell(0, 6, text=safe_txt(degree_text), new_x="LMARGIN", new_y="NEXT")
-                    pdf.ln(2)
-            
-            out = pdf.output(dest='S')
-            if isinstance(out, str):
-                out = out.encode('latin-1')
-            pdf_bytes = io.BytesIO(out)
-            return pdf_bytes
+            # The v2 renderer returns raw bytes, wrap in BytesIO for StreamingResponse
+            pdf_raw_bytes = generate_pdf_to_bytes(resume, include_summary=False)
+            return io.BytesIO(pdf_raw_bytes)
             
         except Exception as e:
             logger.error(f"Error generating PDF: {e}", exc_info=True)

@@ -523,17 +523,14 @@ IMPROVED TEXT:"""
         config: Any,
         user_id: str,
     ) -> Dict:
-        """Server-side generation with memory-optimized retry loop.
-
-        Memory strategy:
-        - Recreate ContentGenerator per attempt (7 sub-modules + AI clients freed)
-        - Explicit del + gc.collect() between attempts
-        - Cap at 5 attempts (diminishing returns beyond that)
-        - Keep only the best TailoredResume; destroy all others
+        """Server-side generation for the first pass.
+        The frontend will drive subsequent passes via regenerate_single_pass 
+        to ensure no single request hits the 60s proxy timeout.
         """
         import gc
         from core.models import GenerationConfig as CoreGenConfig
         from core.models import GenerationMode
+        from intelligence.content_generator import ContentGenerator
 
         if not self.api_key:
             raise ValueError("NVIDIA_API_KEY not configured")
@@ -543,65 +540,29 @@ IMPROVED TEXT:"""
         core_config = CoreGenConfig(
             generation_mode=GenerationMode.TAILOR_WITH_JD if job_description else GenerationMode.ATS_OPTIMIZE_ONLY,
             fabrication_enabled=getattr(config, "fabrication_enabled", True),
-            target_ats_score=getattr(config, "target_ats_score", 93),
+            target_ats_score=getattr(config, "target_ats_score", 92),
             page_match_mode="optimize",
         )
 
-        target_score = 93
-        max_attempts = 1  # single pass — frontend drives retries via /regenerate
-        best_tailored = None
-        best_score = 0.0
-        previous_ats_feedback = None
-        job_analysis = None
+        content_gen = ContentGenerator(self.api_key, self.api_key)
+        
+        try:
+            logger.info("[sync] Starting initial generation pass")
+            
+            # Initial generation pass (Attempt 1)
+            tailored, job_analysis = content_gen.generate_tailored_resume(
+                core_resume, job_description, core_config
+            )
+            
+            ats_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0.0
+            logger.info(f"[sync] Initial pass complete: ATS = {ats_score}")
 
-        for attempt in range(1, max_attempts + 1):
-            # Fresh ContentGenerator per attempt — all 7 sub-modules and
-            # their MistralAIClient / requests sessions are released after
-            # each iteration via del + gc.collect().
-            from intelligence.content_generator import ContentGenerator
-            content_gen = ContentGenerator(self.api_key, self.api_key)
+        finally:
+            del content_gen
+            gc.collect()
 
-            try:
-                if attempt == 1:
-                    tailored, job_analysis = content_gen.generate_tailored_resume(
-                        core_resume, job_description, core_config
-                    )
-                else:
-                    if best_tailored and previous_ats_feedback and job_analysis:
-                        tailored = content_gen.regenerate_with_feedback(
-                            previous_resume=best_tailored,
-                            original_resume=core_resume,
-                            job_analysis=job_analysis,
-                            ats_feedback=previous_ats_feedback,
-                            config=core_config,
-                            retry_count=attempt,
-                        )
-                    else:
-                        break  # nothing to improve
-
-                ats_score = tailored.ats_score.overall if tailored and tailored.ats_score else 0.0
-                logger.info(f"[sync] Attempt {attempt}/{max_attempts}: ATS = {ats_score}")
-
-                if ats_score > best_score:
-                    old_best = best_tailored
-                    best_score = ats_score
-                    previous_ats_feedback = tailored.ats_score
-                    best_tailored = tailored
-                    if old_best is not None and old_best is not tailored:
-                        del old_best
-                else:
-                    previous_ats_feedback = tailored.ats_score
-                    del tailored
-
-                if best_score >= target_score:
-                    break
-            finally:
-                # Destroy ContentGenerator and all its sub-modules
-                del content_gen
-                gc.collect()
-
-        result_dict = convert_core_to_app(best_tailored) if best_tailored else None
-        return {"tailored_resume": result_dict, "ats_score": best_score}
+        result_dict = convert_core_to_app(tailored) if tailored else None
+        return {"tailored_resume": result_dict, "ats_score": ats_score}
 
 
     async def regenerate_single_pass(

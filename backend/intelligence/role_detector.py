@@ -70,6 +70,11 @@ class RoleDetector:
         # Use AI for deeper analysis
         ai_analysis = self._ai_analyze_jd(jd_text)
         
+        # Enforce valid company type from AI, fallback to rule-based
+        ai_company_type_str = ai_analysis.get('company_type', '').lower()
+        valid_company_types = [ct.value for ct in CompanyType]
+        ai_company_type = ai_company_type_str if ai_company_type_str in valid_company_types else company_type
+        
         # Merge rule-based and AI results
         return JobAnalysis(
             role_title=ai_analysis.get('role_title', 'Software Engineer'),
@@ -78,7 +83,7 @@ class RoleDetector:
             key_skills=list(set(key_skills + ai_analysis.get('skills', []))),
             nice_to_have_skills=ai_analysis.get('nice_to_have', []),
             industry=ai_analysis.get('industry', industry),
-            company_type=ai_analysis.get('company_type', company_type),
+            company_type=ai_company_type,
             role_focus_areas=ai_analysis.get('focus_areas', []),
             company_culture_keywords=ai_analysis.get('culture_keywords', []),
             missing_from_resume=[],  # Will be filled later

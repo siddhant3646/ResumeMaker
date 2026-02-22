@@ -141,7 +141,7 @@ async def upload_resume(
             )
         
         # Parse resume
-        parsed_resume = await resume_processor.parse_pdf(content)
+        parsed_resume = await resume_processor.parse_pdf(content, api_key=NVIDIA_API_KEY)
         
         return ResumeUploadResponse(
             success=True,
