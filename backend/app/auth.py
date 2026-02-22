@@ -6,7 +6,7 @@ JWT Token Verification
 import os
 import jwt
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import logging
@@ -21,7 +21,7 @@ AUTH0_ALGORITHMS = ["RS256"]
 # JWKS URL (to get public keys for verification)
 JWKS_URL = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 async def verify_token(token: str) -> dict:
     """
@@ -76,16 +76,25 @@ async def verify_token(token: str) -> dict:
         )
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
     """
     Dependency to get current authenticated user
     Use this in route handlers: current_user: dict = Depends(get_current_user)
     """
+    if request.method == "OPTIONS":
+        return {"sub": "preflight"}
+    
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
     token = credentials.credentials
     payload = await verify_token(token)
     
-    # Check if token has required claims
     if "sub" not in payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
