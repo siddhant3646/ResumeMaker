@@ -28,3 +28,6 @@ jinja2
 
 # Retry logic
 tenacity
+
+# Authentication
+PyJWT
