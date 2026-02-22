@@ -168,10 +168,10 @@ async def generate_resume(
     request: GenerationRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Start async resume generation — returns job_id immediately.
-
-    The actual AI pipeline runs as a background task (no timeout constraint).
-    Frontend polls GET /api/resume/status/{job_id} for progress and results.
+    """Single-pass synchronous resume generation.
+    
+    Returns the tailored resume immediately. Frontend drives additional
+    improvement passes via /api/resume/regenerate.
     """
     try:
         if not NVIDIA_API_KEY:
@@ -180,7 +180,7 @@ async def generate_resume(
                 detail="AI service not configured"
             )
 
-        job_id = await ai_client.start_generation(
+        result = await ai_client.generate_sync(
             resume_data=request.resume_data,
             job_description=request.job_description,
             config=request.config,
@@ -189,18 +189,67 @@ async def generate_resume(
 
         return {
             "success": True,
-            "job_id": job_id,
-            "message": "Generation started",
-            "status": "pending",
+            "job_id": "sync",
+            "message": f"Resume generated! ATS Score: {result.get('ats_score', 0):.0f}",
+            "status": "completed",
+            "tailored_resume": result.get("tailored_resume"),
+            "ats_score": result.get("ats_score"),
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error starting generation: {e}", exc_info=True)
+        logger.error(f"Error generating resume: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error starting generation: {str(e)}"
+            detail=f"Error generating resume: {str(e)}"
+        )
+
+
+class RegenerateRequest(BaseModel):
+    resume_data: TailoredResume
+    job_description: str
+    attempt: int = 2
+
+
+@app.post("/api/resume/regenerate")
+async def regenerate_resume(
+    request: RegenerateRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Single improvement pass using ATS feedback from a previous result.
+    
+    Frontend calls this in a loop until ATS score >= target.
+    Each call is a single pass (~30-60s), well within Render timeout.
+    """
+    try:
+        if not NVIDIA_API_KEY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service not configured"
+            )
+
+        result = await ai_client.regenerate_single_pass(
+            previous_resume=request.resume_data,
+            job_description=request.job_description,
+            attempt=request.attempt,
+            user_id=current_user.get("sub")
+        )
+
+        return {
+            "success": True,
+            "tailored_resume": result.get("tailored_resume"),
+            "ats_score": result.get("ats_score"),
+            "message": f"Improved! ATS Score: {result.get('ats_score', 0):.0f}",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error regenerating resume: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error regenerating: {str(e)}"
         )
 
 

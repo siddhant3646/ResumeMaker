@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase, Brain, FileText, BarChart3 } from 'lucide-react'
-import { generateResume, optimizeATS, getGenerationStatus } from '../services/api'
+import { generateResume, optimizeATS, regenerateResume } from '../services/api'
 import toast from 'react-hot-toast'
 
-const TARGET_ATS_SCORE = 93
+const TARGET_ATS_SCORE = 90
+const MAX_PASSES = 5
 
 const STATUS_MESSAGES = [
   'Analyzing job description keywords…',
@@ -55,8 +56,8 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
 
     try {
       if (mode === 'tailor') {
-        // Step 1: Start generation — returns job_id immediately
-        const startResp = await generateResume({
+        // Pass 1: initial generation
+        const response = await generateResume({
           resume_data: resumeData,
           job_description: jobDescription,
           config: {
@@ -65,45 +66,39 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
           }
         })
 
-        if (!startResp.success || !startResp.job_id) {
-          toast.error(startResp.message || 'Failed to start generation')
+        if (!response.success || !response.tailored_resume) {
+          toast.error(response.message || 'Generation failed')
           return
         }
 
-        const jobId = startResp.job_id
+        let bestResume = response.tailored_resume
+        let bestScore = response.ats_score ?? 0
 
-        // Step 2: Poll for status every 3 seconds
-        const result = await new Promise<any>((resolve, reject) => {
-          const poll = setInterval(async () => {
-            try {
-              const status = await getGenerationStatus(jobId)
+        // Passes 2-5: improve until ATS >= TARGET_ATS_SCORE
+        for (let attempt = 2; attempt <= MAX_PASSES && bestScore < TARGET_ATS_SCORE; attempt++) {
+          try {
+            const improved = await regenerateResume({
+              resume_data: bestResume,
+              job_description: jobDescription,
+              attempt
+            })
 
-              if (status.status === 'completed') {
-                clearInterval(poll)
-                resolve(status)
-              } else if (status.status === 'failed') {
-                clearInterval(poll)
-                reject(new Error(status.error || status.message || 'Generation failed'))
+            if (improved.success && improved.tailored_resume) {
+              const newScore = improved.ats_score ?? 0
+              if (newScore > bestScore) {
+                bestResume = improved.tailored_resume
+                bestScore = newScore
               }
-              // Otherwise keep polling (pending/processing)
-            } catch (err) {
-              clearInterval(poll)
-              reject(err)
             }
-          }, 3000)
-        })
-
-        // Step 3: Handle completed result
-        const tailoredResume = result.result
-        const atsScore = result.ats_score ?? 0
-
-        if (tailoredResume) {
-          localStorage.setItem('tailored_resume', JSON.stringify(tailoredResume))
-          toast.success(`Resume optimized! ATS Score: ${atsScore.toFixed(0)}`)
-          onGenerationComplete(tailoredResume)
-        } else {
-          toast.error('Generation completed but no resume data returned')
+          } catch (err) {
+            console.warn(`Regeneration attempt ${attempt} failed, using best so far`)
+            break
+          }
         }
+
+        localStorage.setItem('tailored_resume', JSON.stringify(bestResume))
+        toast.success(`Resume optimized! ATS Score: ${bestScore.toFixed(0)}`)
+        onGenerationComplete(bestResume)
       } else {
         const response = await optimizeATS({
           resume_data: resumeData

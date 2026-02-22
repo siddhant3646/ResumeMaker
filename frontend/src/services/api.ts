@@ -46,7 +46,18 @@ export const generateResume = async (data: {
   config?: any
 }) => {
   const response = await api.post('/api/resume/generate', data, {
-    timeout: 600_000, // 10 minutes — server retries up to 5 attempts
+    timeout: 120_000, // 2 min max for single pass
+  })
+  return response.data
+}
+
+export const regenerateResume = async (data: {
+  resume_data: any
+  job_description: string
+  attempt: number
+}) => {
+  const response = await api.post('/api/resume/regenerate', data, {
+    timeout: 120_000,
   })
   return response.data
 }
