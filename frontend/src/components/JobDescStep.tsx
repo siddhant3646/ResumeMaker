@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Sparkles, Target, Zap, ArrowLeft, Check, Briefcase, Brain, FileText, BarChart3 } from 'lucide-react'
-import { generateResume, optimizeATS } from '../services/api'
+import { generateResume, optimizeATS, regenerateResume } from '../services/api'
 import toast from 'react-hot-toast'
 
 const TARGET_ATS_SCORE = 90
@@ -56,6 +56,7 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
 
     try {
       if (mode === 'tailor') {
+        // Pass 1: initial generation
         const response = await generateResume({
           resume_data: resumeData,
           job_description: jobDescription,
@@ -70,8 +71,30 @@ export default function JobDescStep({ resumeData, onGenerationComplete, onAtsCom
           return
         }
 
-        const bestResume = response.tailored_resume
-        const bestScore = response.ats_score ?? 0
+        let bestResume = response.tailored_resume
+        let bestScore = response.ats_score ?? 0
+
+        // Passes 2-5: improve until ATS >= TARGET_ATS_SCORE
+        for (let attempt = 2; attempt <= MAX_PASSES && bestScore < TARGET_ATS_SCORE; attempt++) {
+          try {
+            const improved = await regenerateResume({
+              resume_data: bestResume,
+              job_description: jobDescription,
+              attempt
+            })
+
+            if (improved.success && improved.tailored_resume) {
+              const newScore = improved.ats_score ?? 0
+              if (newScore > bestScore) {
+                bestResume = improved.tailored_resume
+                bestScore = newScore
+              }
+            }
+          } catch (err) {
+            console.warn(`Regeneration attempt ${attempt} failed, using best so far`)
+            break
+          }
+        }
 
         localStorage.setItem('tailored_resume', JSON.stringify(bestResume))
         toast.success(`Resume optimized! ATS Score: ${bestScore.toFixed(0)}`)
