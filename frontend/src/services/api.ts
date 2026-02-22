@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 
 // Use explicit Render URL in production to bypass Vercel proxy, or use local dev server
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://siddhant3646-resumemakerhugginface.hf.space' : 'http://localhost:8000')
@@ -10,6 +10,19 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+// Retry helper for transient failures
+const fetchWithRetry = async <T>(fn: () => Promise<T>, retries = 2): Promise<T> => {
+  try {
+    return await fn()
+  } catch (error) {
+    if (retries > 0 && (error as AxiosError)?.code === 'ECONNABORTED') {
+      console.log(`Request timed out, retrying... (${retries} retries left)`)
+      return fetchWithRetry(fn, retries - 1)
+    }
+    throw error
+  }
+}
 
 // Add auth token to requests
 export const setAuthToken = (token: string) => {
@@ -45,9 +58,9 @@ export const generateResume = async (data: {
   job_description: string
   config?: any
 }) => {
-  const response = await api.post('/api/resume/generate', data, {
+  const response = await fetchWithRetry(() => api.post('/api/resume/generate', data, {
     timeout: 300_000, // 5 minutes for HuggingFace cold start
-  })
+  }))
   return response.data
 }
 
@@ -57,9 +70,9 @@ export const regenerateResume = async (data: {
   attempt: number
   force_variation?: boolean
 }) => {
-  const response = await api.post('/api/resume/regenerate', data, {
+  const response = await fetchWithRetry(() => api.post('/api/resume/regenerate', data, {
     timeout: 300_000, // 5 minutes for HuggingFace
-  })
+  }))
   return response.data
 }
 
