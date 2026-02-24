@@ -1,137 +1,169 @@
-# ResumeMaker AI - Streamlit Backend
+# ResumeMaker AI - Streamlit Application
 
-This is the Streamlit backend service for ResumeMaker AI, designed to work with the Vercel-hosted React frontend.
+A comprehensive AI-powered resume builder built with Streamlit. Upload your resume, tailor it for specific job descriptions, and download ATS-optimized PDFs.
 
-## 🏗️ Architecture
+## Features
 
-```
-┌─────────────────┐         ┌─────────────────┐
-│   Vercel        │   API   │   Streamlit     │
-│   Frontend      │ ──────► │   Backend       │
-│   (React)       │         │   (Python)      │
-└─────────────────┘         └─────────────────┘
-```
+- 📤 **Resume Upload** - Upload and parse PDF resumes
+- 🎯 **AI Tailoring** - Generate resumes optimized for specific job descriptions
+- 📊 **ATS Scoring** - Get ATS compatibility scores
+- 📝 **Resume Editor** - View and edit generated resumes
+- 🔒 **Password Protection** - Secure access with password authentication
+- 🎨 **Modern UI** - Beautiful dark theme with custom styling
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Local Development
 
-1. **Install dependencies:**
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/resumemaker.git
+   cd resumemaker/streamlit_app
+   ```
+
+2. **Create virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Set up environment variables:**
+4. **Set environment variables**
    ```bash
    cp .env.example .env
    # Edit .env and add your NVIDIA_API_KEY
    ```
 
-3. **Run Streamlit app:**
+5. **Run the app**
    ```bash
    streamlit run app.py
    ```
 
-4. **Run API server (separate terminal):**
-   ```bash
-   python api.py
+## Deployment to Streamlit Cloud
+
+### Step 1: Push to GitHub
+
+Make sure your repository is pushed to GitHub with the latest changes.
+
+### Step 2: Deploy on Streamlit Cloud
+
+1. Go to [share.streamlit.io](https://share.streamlit.io)
+2. Sign in with your GitHub account
+3. Click **New app**
+4. Configure:
+   - **Repository:** Select your ResumeMaker repository
+   - **Branch:** `main`
+   - **Main file path:** `streamlit_app/app.py`
+5. Click **Deploy**
+
+### Step 3: Configure Secrets
+
+In the Streamlit Cloud dashboard:
+
+1. Go to your app's **Settings** > **Secrets**
+2. Add these secrets:
+   ```toml
+   NVIDIA_API_KEY = "your-nvidia-api-key-here"
+   APP_PASSWORD = "your-password-here"
    ```
+3. Click **Save**
 
-### Streamlit Cloud Deployment
+### Step 4: Access Your App
 
-1. Push this directory to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Connect your GitHub repository
-4. Set the following secrets:
-   - `NVIDIA_API_KEY`: Your NVIDIA API key
+Your app will be available at: `https://your-app-name.streamlit.app`
 
-### Render Deployment
+**Password:** You must set `APP_PASSWORD` in Streamlit secrets. There is no default password in production.
 
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Set the following:
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`
-   - **Environment Variables:** `NVIDIA_API_KEY`
+For local development with `STREAMLIT_ENV=development`, the password is `dev-password`.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 streamlit_app/
-├── app.py              # Main Streamlit application
-├── api.py              # FastAPI wrapper for REST endpoints
-├── requirements.txt    # Python dependencies
+├── app.py                    # Main Streamlit application
+├── requirements.txt          # Python dependencies
+├── .env.example             # Environment variables template
 ├── .streamlit/
-│   └── config.toml     # Streamlit configuration
-├── .env.example        # Environment variables template
-└── README.md           # This file
+│   └── config.toml          # Streamlit configuration
+├── backend/                  # Backend modules
+│   ├── __init__.py
+│   └── app/
+│       ├── __init__.py
+│       ├── models.py
+│       ├── resume.py
+│       └── ai_client.py
+├── intelligence/             # AI modules
+│   ├── __init__.py
+│   ├── ats_scorer.py
+│   ├── content_generator.py
+│   └── role_detector.py
+└── vision/                   # PDF validation
+    ├── __init__.py
+    └── pdf_validator.py
 ```
 
-## 🔗 API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/resume/upload` | POST | Upload and parse resume PDF |
-| `/api/resume/generate` | POST | Generate tailored resume |
-| `/api/resume/score` | POST | Calculate ATS score |
-| `/api/resume/render` | POST | Render resume as PDF |
-
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `NVIDIA_API_KEY` | NVIDIA AI API key | Yes |
-| `FRONTEND_URL` | Frontend URL for CORS | No (default: localhost:5173) |
+| `NVIDIA_API_KEY` | NVIDIA API key for AI features | Yes |
+| `APP_PASSWORD` | Password for app access | Yes (no default in production) |
 
 ### Streamlit Secrets
 
-For Streamlit Cloud, set secrets in the dashboard:
+Set these in the Streamlit Cloud dashboard:
 
 ```toml
-NVIDIA_API_KEY = "your-api-key-here"
+NVIDIA_API_KEY = "your-key"
+APP_PASSWORD = "your-password"
 ```
 
-## 🔌 Frontend Integration
+## Usage
 
-Update your React frontend to point to the Streamlit backend:
+1. **Login** - Enter the app password
+2. **Upload Resume** - Upload your existing resume PDF
+3. **Generate** - Paste job description and generate tailored resume
+4. **Edit** - Review and modify the generated content
+5. **Download** - Download the ATS-optimized PDF
 
-```typescript
-// frontend/src/services/api.ts
-const API_URL = process.env.VITE_API_URL || 'http://localhost:8001';
+## API Keys
 
-export const uploadResume = async (file: File) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  const response = await fetch(`${API_URL}/api/resume/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-  
-  return response.json();
-};
-```
+### NVIDIA API Key
 
-## 🧪 Testing
+1. Go to [NVIDIA Developer](https://developer.nvidia.com/)
+2. Sign up/Login
+3. Generate an API key
+4. Add to Streamlit secrets
 
-```bash
-# Test API health
-curl http://localhost:8001/api/health
+## Troubleshooting
 
-# Test resume upload
-curl -X POST http://localhost:8001/api/resume/upload \
-  -F "file=@test_resume.pdf"
-```
+### Import Errors
 
-## 📝 Notes
+If you see import errors, ensure all modules are in the `streamlit_app/` directory:
+- `backend/`
+- `intelligence/`
+- `vision/`
 
-- The Streamlit app provides a visual interface for testing
-- The FastAPI wrapper (`api.py`) provides REST endpoints for the React frontend
-- Both can run simultaneously on different ports
+### API Key Issues
 
-## 📄 License
+If AI features don't work:
+1. Check that `NVIDIA_API_KEY` is set in secrets
+2. Verify the key is valid
+3. Check Streamlit logs for errors
 
-MIT License
+### PDF Generation Issues
+
+If PDF generation fails:
+1. Ensure `fpdf2` is installed
+2. Check that resume data is valid
+3. Try regenerating the resume
+
+## License
+
+MIT License - See LICENSE file for details.
